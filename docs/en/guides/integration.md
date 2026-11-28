@@ -9,18 +9,24 @@
 | WASM | Start with `--no-default-features` for byte APIs, or evaluate the package feature for seekable in-memory input. Qualify the selected target and implement browser storage in the consumer. Use lossless decoding for precision-sensitive payloads. |
 
 Open a working snapshot with `Project::open`. Use registry IDs as stable
-selection keys. Capture each affected or relied-on resource revision when
-reading its content. Build a `ChangeSet` for native writes and use
-`Project::apply` with an explicit codec registry for authored document
-operations. Display successful reads and structural checks separately from
-editor support. See [Transactions](../architecture/transactions.md).
+selection keys. Capture the consulted documents and local resource revisions
+with `Project::read_set`. Attach the tokens to a `ChangeSet` and use
+`Project::apply_with_outcome` with the owner codec registry. Re-read on a
+conflict, and inspect a published result before retrying a durability or
+cleanup warning. Display structural checks separately from editor support.
+See [Transactions](../architecture/transactions.md).
 
 For a `.cirpkg`, `package::inspect` reads metadata and
 `package::verify_only` verifies a `Read + Seek` archive without destination
 access. Use `package::export_from` with a `PackageSource` and a `Write + Seek`
 sink for portable export. The native `package::verify` prepares an import in
 scratch storage. Publish its verified result into a new, caller-controlled
-directory. See [Package security](../architecture/package-security.md).
+directory with `publish_retryable`. See [Package security](../architecture/package-security.md).
+
+The [standalone Rust consumer](../../../examples/qualified_consumer.rs)
+exercises these APIs using test-only domain schemas. It qualifies the local
+library workflow. Product integration, browser persistence and execution
+authorization require separate evidence.
 
 Contracts owns the shared CircuitGraph profiles. Pass the original bytes
 to the owner validator and retain the owner-defined editor rules. Project

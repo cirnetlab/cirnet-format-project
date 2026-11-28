@@ -375,7 +375,7 @@ impl<R: Read + Seek> Inspected<R> {
         limits: &Limits,
         stage: &mut impl Stage,
         operation: &mut Operation<'_>,
-    ) -> Result<Manifest> {
+    ) -> Result<(Manifest, Inventory)> {
         let Self {
             mut archive,
             manifest,
@@ -398,7 +398,7 @@ impl<R: Read + Seek> Inspected<R> {
             }
         }
         operation.check(None, 0)?;
-        Ok(manifest)
+        Ok((manifest, archive.inventory))
     }
 }
 

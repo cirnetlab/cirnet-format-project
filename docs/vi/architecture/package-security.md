@@ -25,8 +25,16 @@ tên thành viên nếu có và số byte của thành viên hiện tại. Trả
 `ControlFlow::Break(())` để hủy tại điểm kiểm tra. Xuất trực tiếp vào đích do
 bên gọi cung cấp có thể để lại byte chưa hoàn chỉnh. Khi hủy xuất tệp
 native, tệp đích vẫn chưa được công bố. Dùng vùng tạm nhập riêng có hạn
-mức. Việc hủy hoặc gián đoạn trước khi công bố manifest có thể để lại thư
-mục đích chưa hoàn chỉnh. Kiểm tra thư mục này trước khi thử lại.
+mức. Dùng `VerifiedPackage::publish_retryable` để giữ bản nhập đã chuẩn bị
+sau khi bị từ chối trước công bố và đã dọn dẹp xong, kể cả khi hủy. Phương
+thức chỉ dọn tệp đã xác minh do thao tác đặt vào đích và thư mục rỗng do
+thao tác tạo. `PackagePublishError::Incomplete` báo đích được giữ lại khi
+chưa chắc có thể dọn an toàn. Xác định quyền sở hữu trước khi xóa mục giữ
+lại. Sau gián đoạn, dùng `inspect_package_destination` để kiểm tra dấu nhập
+đang chờ hoặc manifest. Dấu dùng để chẩn đoán và không cấp quyền xóa đích
+sau khi khởi động lại. Dành riêng đích cục bộ do bên gọi kiểm soát trong
+suốt lúc công bố và hoàn tác. Manifest là điểm công bố. Kết quả đã công bố trả về
+dự án đã mở cùng cảnh báo đồng bộ hoặc dọn dẹp nếu có.
 
 ## Đường dẫn di động và profile tương lai
 
@@ -47,4 +55,4 @@ ngoài cần mô hình tin cậy và truy cập tường minh. Phiên bản 1.0 
 phân giải các vị trí này.
 
 <!-- source: docs/en/architecture/package-security.md -->
-<!-- source-sha256: 34cc066e233b7859758c1aa47665bdd792f5d8d52cea4c7a1fa026c88ad30f2e -->
+<!-- source-sha256: 0ffcce69285a854b3bd06ac54228f570f2ca722f09eeaf1ebc32450f682cc6a3 -->

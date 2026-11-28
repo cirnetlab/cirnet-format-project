@@ -3,6 +3,8 @@
 mod graph;
 pub(crate) mod path;
 
+#[cfg(feature = "native")]
+pub(crate) use graph::walk_hard_dependencies;
 pub use graph::{ReferenceIndex, ResourceEdge, ResourceGraph, ResourceImpact, ResourceOwner};
 pub use path::ProjectPath;
 

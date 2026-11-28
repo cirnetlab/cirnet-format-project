@@ -39,6 +39,17 @@ cargo doc --locked --all-features --no-deps
   Record property or fuzz tool, corpus, target, duration and findings
   when running parser or archive fuzzing.
 
+Run the shared Draft 2020-12 vectors with an approved Ajv 8.20.0 module and
+compare the Rust dispositions with `cargo test --locked --test schema_conformance`.
+`cargo test --locked --test parser_mutations` runs bounded deterministic
+parser and property cases. Run the public consumer qualification with a new
+output directory.
+
+```sh
+node tests/check-schemas.cjs <path-to-ajv-dist-2020.js>
+cargo run --locked --release --example qualified_consumer -- <new-directory>
+```
+
 ## Documentation checks
 
 From this repository root, use `check-docs --product --root .` from an approved
@@ -67,4 +78,6 @@ records local Windows Foundation results, baseline provenance and artifact
 checksums. The
 [baseline CI run](https://github.com/cirnetlab/cirnet-format-project/actions/runs/46088261341)
 applies to [commit `cc3a257`](https://github.com/cirnetlab/cirnet-format-project/commit/cc3a257e03560943b531341d1520bf7f0892eb2c).
-Use fresh runs and measurements to qualify crate 0.2.0.
+The [0.2.0 hardening qualification report](../../history/v0.2.0-hardening-qualification.md)
+records the exercised Windows candidate, scope gaps, benchmark comparison and
+artifact digests.

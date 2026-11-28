@@ -178,6 +178,9 @@ fn status(
     {
         return Ok((RecoveryState::Diverged, Some(journal)));
     }
+    if !verify_staging(&stage, &journal, limits)? {
+        return Ok((RecoveryState::Diverged, Some(journal)));
+    }
     let current = match read_file(root, &journal.manifest, limits.max_json_bytes) {
         Ok(bytes) => Digest::of(&bytes),
         Err(Error::Missing(_) | Error::Path(_) | Error::Limit { .. }) => {
@@ -209,14 +212,47 @@ pub(crate) fn inspect(
     status(root, manifest, limits).map(|(state, _)| state)
 }
 
+fn stage_index(name: &str) -> Option<usize> {
+    let index = name.strip_prefix("write-")?.strip_suffix(".stage")?;
+    if index.len() != 8 || !index.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    index.parse().ok()
+}
+
 fn owned_stage_file(name: &str) -> bool {
-    matches!(name, JOURNAL | JOURNAL_TEMP | ANCHOR_STAGE)
-        || name
-            .strip_prefix("write-")
-            .and_then(|tail| tail.strip_suffix(".stage"))
-            .is_some_and(|index| {
-                index.len() == 8 && index.bytes().all(|byte| byte.is_ascii_digit())
-            })
+    matches!(name, JOURNAL | JOURNAL_TEMP | ANCHOR_STAGE) || stage_index(name).is_some()
+}
+
+fn verify_staging(stage: &Path, journal: &Journal, limits: &Limits) -> Result<bool> {
+    // A crash during cleanup can leave only a subset of the expected files.
+    // Any surviving staged bytes must still belong to this journal.
+    for entry in fs::read_dir(stage).map_err(|error| io(stage.display().to_string(), error))? {
+        let entry = entry.map_err(|error| io(stage.display().to_string(), error))?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            return Ok(false);
+        };
+        if name == JOURNAL {
+            continue;
+        }
+        let (expected, bound, size) = if name == ANCHOR_STAGE {
+            (&journal.after, limits.max_json_bytes, None)
+        } else {
+            let Some(file) = stage_index(name).and_then(|index| journal.files.get(index)) else {
+                return Ok(false);
+            };
+            (&file.digest, file.bytes, Some(file.bytes))
+        };
+        let path = ProjectPath::new(name)?;
+        let actual = open_regular(stage, &path).and_then(|handle| hash_reader(handle, bound));
+        if !actual
+            .is_ok_and(|(bytes, digest)| &digest == expected && size.is_none_or(|n| n == bytes))
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 pub(crate) fn cleanup(root: &Path, limit: usize) -> Result<()> {
@@ -341,5 +377,37 @@ mod tests {
         );
         assert!(!stage.exists());
         assert_eq!(fs::read(root.join(resource.as_path())).unwrap(), b"asset");
+    }
+
+    #[test]
+    fn recovery_retains_replaced_payloads_in_private_staging() {
+        let folder = tempfile::tempdir().unwrap();
+        let root = folder.path();
+        let limits = Limits::default();
+        let manifest = ProjectPath::new("project.cirproj").unwrap();
+        fs::write(root.join(manifest.as_path()), b"previous").unwrap();
+        let stage = begin(root).unwrap();
+        let payload = stage.join(data_name(0));
+        fs::write(&payload, b"expected").unwrap();
+        write_journal(
+            &stage,
+            &Journal {
+                version: 1,
+                manifest: manifest.clone(),
+                before: Digest::of(b"previous"),
+                after: Digest::of(b"next"),
+                files: vec![JournalFile {
+                    path: ProjectPath::new("asset.bin").unwrap(),
+                    digest: Digest::of(b"expected"),
+                    bytes: 8,
+                }],
+            },
+        )
+        .unwrap();
+        fs::write(&payload, b"external").unwrap();
+        let report = recover(root, &manifest, &limits).unwrap();
+        assert_eq!(report.state, RecoveryState::Diverged);
+        assert_eq!(fs::read(payload).unwrap(), b"external");
+        assert!(stage.join(JOURNAL).exists());
     }
 }

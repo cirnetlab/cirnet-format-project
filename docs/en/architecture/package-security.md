@@ -25,8 +25,17 @@ optional member name and current member byte count. Return
 `ControlFlow::Break(())` to cancel at a checkpoint. Direct export to a caller
 sink can leave partial bytes in that sink. A canceled native file export
 keeps the target unpublished. Use private, quota-controlled import staging.
-Cancellation or interruption before manifest publication can leave an
-incomplete destination directory. Inspect it before retrying.
+Use `VerifiedPackage::publish_retryable` to keep the prepared import after a
+clean pre-publication rejection, including cancellation. It removes only
+verified files installed by the operation and empty directories it created.
+`PackagePublishError::Incomplete` reports a retained destination when
+cleanup is uncertain. Do not delete retained entries without establishing
+ownership. After interruption, use `inspect_package_destination` to check
+for a pending import marker or a manifest. The marker is diagnostic and
+supplies no authority to delete a destination after a restart. Reserve an
+exclusive, caller-controlled local destination during publication and rollback.
+A manifest indicates the publication point. A published outcome carries the opened project and any
+synchronization or cleanup warning.
 
 ## Portable paths and future profiles
 

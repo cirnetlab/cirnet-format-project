@@ -8,10 +8,12 @@ use crate::{
     decode_manifest,
     error::{check_limit, io},
     hash_reader,
-    transaction::{self, ChangeSet, ResourceWrite, WriteMode},
+    transaction::{
+        self, ChangeSet, ResourceWrite, TransactionOutcome, ValidatedReadSet, WriteMode,
+    },
 };
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs::File,
     io::Read,
     path::{Path, PathBuf},
@@ -28,6 +30,7 @@ pub struct Project {
     libraries: HashMap<String, usize>,
 }
 
+#[derive(Debug)]
 pub struct Snapshot {
     pub bytes: Vec<u8>,
     pub revision: Digest,
@@ -131,13 +134,73 @@ impl Project {
 
     /// Read a bounded, validated document. Use decode_document to inspect its capability.
     pub fn read_document(&self, id: &str) -> Result<Snapshot> {
-        let entry = self.document(id)?;
-        let bytes = read_file(&self.root, &entry.path, self.limits.max_json_bytes)?;
+        self.read_document_bounded(self.document(id)?, self.limits.max_json_bytes)
+    }
+
+    fn read_document_bounded(&self, entry: &crate::DocumentEntry, limit: u64) -> Result<Snapshot> {
+        let bytes = read_file(
+            &self.root,
+            &entry.path,
+            limit.min(self.limits.max_json_bytes),
+        )?;
         decode_document(entry, &bytes, &self.limits)?;
         Ok(Snapshot {
             revision: Digest::of(&bytes),
             bytes,
         })
+    }
+
+    /// Capture requested documents and local asset tokens within the project limits.
+    /// Bytes are loaded before taking the writer lock for the final revision check.
+    pub fn read_set(&self, ids: &[&str]) -> Result<ValidatedReadSet> {
+        check_limit(
+            "read set resources",
+            ids.len() as u64,
+            self.limits.max_resources as u64,
+        )?;
+        self.check_revision()?;
+        let mut documents = BTreeMap::new();
+        let mut expected = BTreeMap::new();
+        let mut remaining = self.limits.max_total_bytes;
+        for &id in ids {
+            if expected.contains_key(id) {
+                return Err(Error::Validation(format!(
+                    "duplicate read set resource {id}"
+                )));
+            }
+            let resource = self.resource(id).ok_or_else(|| Error::Missing(id.into()))?;
+            let (size, revision) = if let Resource::Document(entry) = resource {
+                let document = self.read_document_bounded(entry, remaining)?;
+                let token = (document.bytes.len() as u64, document.revision.clone());
+                documents.insert(id.to_owned(), document);
+                token
+            } else {
+                self.resource_digest(resource, remaining)?
+            };
+            remaining -= size;
+            expected.insert(id.to_owned(), revision);
+        }
+        let set = ValidatedReadSet {
+            manifest: self.revision.clone(),
+            expected,
+            documents,
+        };
+        self.validate_read_set(&set)?;
+        Ok(set)
+    }
+
+    /// Recheck the manifest and the requested resource tokens under the writer lock.
+    /// A successful check establishes a coherent snapshot for cooperating writers.
+    pub fn validate_read_set(&self, set: &ValidatedReadSet) -> Result<()> {
+        transaction::revision::verify_revision(
+            self.revision.clone(),
+            &set.manifest,
+            "manifest revision",
+        )?;
+        let _lock = write_lock(&self.root)?;
+        self.ensure_no_pending()?;
+        self.check_revision()?;
+        transaction::revision::verify_expected(self, &set.expected, None)
     }
 
     /// Open a native asset without buffering its content.
@@ -170,7 +233,8 @@ impl Project {
         Ok(())
     }
 
-    /// Replace one document under the transaction policy. Use apply for declared dependencies.
+    /// Replace one document with no hard dependencies or separate declared reads.
+    /// Use a change set and apply when the edit depends on other local resources.
     pub fn save_document(
         &self,
         id: &str,
@@ -178,6 +242,28 @@ impl Project {
         bytes: &[u8],
         validate_change: impl FnOnce(&crate::DocumentEntry, &[u8]) -> std::result::Result<(), String>,
     ) -> Result<Digest> {
+        let outcome =
+            self.save_document_with_outcome(id, expected_revision, bytes, validate_change)?;
+        if let Some(error) = outcome.completion_error {
+            return Err(error);
+        }
+        Ok(outcome
+            .resources
+            .into_iter()
+            .next()
+            .and_then(|change| change.revision)
+            .unwrap_or_else(|| expected_revision.clone()))
+    }
+
+    /// Replace one document and report publication, its resource revision, and any
+    /// synchronization failure separately.
+    pub fn save_document_with_outcome(
+        &self,
+        id: &str,
+        expected_revision: &Digest,
+        bytes: &[u8],
+        validate_change: impl FnOnce(&crate::DocumentEntry, &[u8]) -> std::result::Result<(), String>,
+    ) -> Result<TransactionOutcome> {
         let entry = self.document(id)?;
         let mut changes = ChangeSet::new(self.revision.clone());
         changes.expect(id, expected_revision.clone());
@@ -197,8 +283,7 @@ impl Project {
                     .map_err(Error::Validation)
             },
         )?;
-        published.completion?;
-        Ok(published.document.expect("one in-place resource revision"))
+        Ok(published.outcome)
     }
 
     /// Apply an explicit staged transaction using registered domain codecs.
@@ -207,6 +292,17 @@ impl Project {
         changes: ChangeSet<R>,
         registry: &CodecRegistry,
     ) -> Result<()> {
+        let outcome = self.apply_with_outcome(changes, registry)?;
+        outcome.completion_error.map_or(Ok(()), Err)
+    }
+
+    /// Apply using the shared transaction policy and report the persisted outcome.
+    /// An outcome with a completion diagnostic has already advanced the project.
+    pub fn apply_with_outcome<R: Read>(
+        &mut self,
+        changes: ChangeSet<R>,
+        registry: &CodecRegistry,
+    ) -> Result<TransactionOutcome> {
         let published = transaction::commit::execute(
             self,
             changes,
@@ -224,16 +320,44 @@ impl Project {
                 self.limits,
             );
         }
-        published.completion
+        Ok(published.outcome)
     }
 
-    /// Compatibility entry point for a manifest-only update. Resource edits require apply.
+    /// Update metadata using explicit local resource revision tokens. File operations
+    /// such as relocation or replacement require a change set.
+    pub fn commit_metadata(
+        &mut self,
+        next: Manifest,
+        reads: &ValidatedReadSet,
+    ) -> Result<TransactionOutcome> {
+        let mut changes = ChangeSet::<&[u8]>::new(self.revision.clone());
+        changes.include_read_set(reads)?;
+        changes.set_manifest(next);
+        self.apply_with_outcome(changes, &CodecRegistry::new())
+    }
+
+    /// Compatibility entry point for manifest metadata with no local registration edits.
+    /// Use commit_metadata for metadata on registered local resources or apply for bytes.
     pub fn commit<R: Read>(&mut self, next: Manifest, files: Vec<StagedFile<R>>) -> Result<()> {
-        self.check_revision()?;
         if !files.is_empty() {
+            self.check_revision()?;
             return Err(Error::Validation(
                 "resource changes require a ChangeSet, affected revisions and codec registry"
                     .into(),
+            ));
+        }
+        let same_local_entries = self.manifest.documents.len() == next.documents.len()
+            && self.manifest.assets.len() == next.assets.len()
+            && next
+                .documents
+                .iter()
+                .map(Resource::Document)
+                .chain(next.assets.iter().map(Resource::Asset))
+                .all(|resource| self.resource(resource.id()) == Some(resource));
+        if !same_local_entries {
+            self.check_revision()?;
+            return Err(Error::Validation(
+                "local registration changes require commit_metadata with read revisions or a ChangeSet".into(),
             ));
         }
         let mut changes = ChangeSet::<R>::new(self.revision.clone());
@@ -244,14 +368,22 @@ impl Project {
     /// Compute a bounded byte revision for a registered resource without decoding it.
     pub fn resource_revision(&self, id: &str) -> Result<Digest> {
         let resource = self.resource(id).ok_or_else(|| Error::Missing(id.into()))?;
-        let path = resource
-            .path()
-            .ok_or_else(|| Error::Validation(format!("external resource {id} has no revision")))?;
+        self.resource_digest(resource, u64::MAX)
+            .map(|(_, digest)| digest)
+    }
+
+    fn resource_digest(&self, resource: Resource<'_>, remaining: u64) -> Result<(u64, Digest)> {
+        let path = resource.path().ok_or_else(|| {
+            Error::Validation(format!(
+                "external resource {} has no revision",
+                resource.id()
+            ))
+        })?;
         let limit = match resource {
             Resource::Document(_) => self.limits.max_json_bytes,
             _ => self.limits.max_asset_bytes,
         };
-        hash_reader(open_regular(&self.root, path)?, limit).map(|(_, digest)| digest)
+        hash_reader(open_regular(&self.root, path)?, limit.min(remaining))
     }
 
     /// Read the recovery state while coordinating with cooperating writers.

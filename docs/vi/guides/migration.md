@@ -12,7 +12,8 @@ ghi lại dự án được hỗ trợ.
    Cung cấp `ChangeSet` với revision manifest dự kiến cùng digest của tài
    nguyên bị tác động và phụ thuộc đọc đã khai báo. Đăng ký codec chuyên
    ngành xác thực nội dung được chỉnh sửa. Chỉ dùng điểm vào
-   `Project::commit` được giữ lại cho thay đổi metadata.
+   `Project::commit` được giữ lại cho metadata cấp dự án. Với metadata của
+   tài nguyên đã đăng ký, truyền tập đọc cho `Project::commit_metadata`.
 3. Tiếp tục dùng `Project::save_document` khi chỉ lưu một tài liệu và đầu
    vào revision cùng trình xác thực đáp ứng thao tác. Dùng change set khi
    thao tác có phụ thuộc cứng hoặc dựa vào tệp cục bộ khác.
@@ -23,10 +24,12 @@ ghi lại dự án được hỗ trợ.
 Dùng mục đích phù hợp với thao tác tệp. Có thể di chuyển tài liệu chưa được
 hỗ trợ bằng byte gốc. Viết envelope hoặc schema khác cần đường chuyển đổi
 tường minh được hỗ trợ. Với chuyển đổi native, đăng ký codec có khả năng
-chuyển đổi cho cả nguồn và đích. Dùng bộ nhận diện phiên bản định dạng trước
-khi chọn bước chuyển đổi. Bước chuyển đổi do bên sở hữu cung cấp phải tạo
-đúng đích đã khai báo, và đích phải qua các kiểm tra áp dụng. Giữ byte nguồn và xác
-minh kết quả trước khi thay trạng thái dự án.
+chuyển đổi cho cả hai biểu diễn và khai báo cặp nguồn–đích chính xác bằng
+`DocumentMigration` với `CodecRegistry::register_migration`. Trình xác thực
+của bên sở hữu kiểm tra đồng thời byte gốc và byte đề xuất. Codec đích phải
+cho phép ghi. Dùng `CodecRegistry::validate_transition` để kiểm chứng nội
+dung trước khi lưu. Giao dịch `WriteMode::Migrate` cũng kiểm tra bước chuyển
+đã đăng ký, định danh ổn định và việc giữ dữ liệu mở rộng trước khi công bố.
 
 ## Nhập CircuitGraph cũ
 
@@ -46,4 +49,4 @@ xác thực theo ngữ cảnh. Với phiên bản chưa hỗ trợ, giữ đầu
 chọn bước chuyển đổi của bên sở hữu khi có.
 
 <!-- source: docs/en/guides/migration.md -->
-<!-- source-sha256: ae32b43398483f15003eee2b0458fbf6acf8d963ecf4ea5ef8812474fc7c7b7d -->
+<!-- source-sha256: 89ccdada56a711a5418396000e05ee94ad3d6d694fd23411d76fa825f6bd763a -->

@@ -43,3 +43,16 @@ jobs:
       - run: cargo +1.89.0 test --locked --all-features
       - run: cargo +1.89.0 check --locked --no-default-features --target wasm32-unknown-unknown
       - run: cargo +1.89.0 check --locked --no-default-features --features package --target wasm32-unknown-unknown
+
+  schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check the Project Format Draft 2020-12 schemas
+        shell: bash
+        run: |
+          schema_tools="$RUNNER_TEMP/cirnet-schema-tools"
+          npm install --prefix "$schema_tools" --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ajv@8.20.0
+          node tests/check-schemas.cjs "$schema_tools/node_modules/ajv/dist/2020.js"

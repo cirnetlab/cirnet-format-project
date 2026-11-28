@@ -17,7 +17,7 @@ Engine chuyên ngành có thể dùng định dạng qua codec do bên gọi cun
 | Nhận diện phiên bản, chuyển đổi tường minh và nhập CircuitGraph cũ | `src/migration/` |
 | Digest và bảng kiểm kê gói | `src/integrity/` |
 | Profile ZIP, kiểm tra sơ bộ, đọc, ghi và xác minh | `src/package/` |
-| Kiểm tra revision, chuẩn bị thay đổi và phục hồi | `src/transaction/` |
+| Lập kế hoạch, tập đọc, kiểm tra revision, công bố và phục hồi | `src/transaction/` |
 | Dự án đang làm việc và thao tác hệ thống tệp | `src/storage/native/` |
 | Điểm vào API, lỗi và giới hạn đầu vào | `src/lib.rs`, `src/error.rs`, `src/limits.rs` |
 
@@ -35,4 +35,4 @@ Lab-First, Remote cấp quyền thao tác và quản lý lease, còn Hardware th
 bảo vệ tại trạm. Xem [bảng phân quyền sở hữu của CIRNETLAB](https://github.com/cirnetlab/cirnet-rules/blob/master/en/references/architecture-routing.md).
 
 <!-- source: docs/en/architecture/overview.md -->
-<!-- source-sha256: 6fcfe98f7029f05c139ab832ea42fd36b15f8f35eb39e3159b6c5bd3d983423c -->
+<!-- source-sha256: 27ed8fef9c08704eaff3c9d28f12fb62714bff6d79a0f89de9ea3ad57f623bf1 -->

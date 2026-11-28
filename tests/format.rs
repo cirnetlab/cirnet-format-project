@@ -257,3 +257,31 @@ fn legacy_import_keeps_all_input_bytes_and_requires_validation() {
         );
     }
 }
+
+#[test]
+fn manifest_fast_path_retains_header_and_strict_input_diagnostics() {
+    let limits = Limits::default();
+    let future =
+        br#"{"format":"cirnet.project","format_version":"2.0","unknown_future_field":true}"#;
+    assert!(matches!(
+        decode_manifest(future, &limits),
+        Err(Error::Unsupported { domain: "project", version }) if version == "2.0"
+    ));
+    let malformed_header = br#"{"format":"cirnet.project","format_version":1,"name":"Lab"}"#;
+    assert!(matches!(
+        decode_manifest(malformed_header, &limits),
+        Err(Error::Validation(_))
+    ));
+    assert!(matches!(
+        decode_manifest(
+            br#"["cirnet.project","1.0","lab","Lab",["electronics"]]"#,
+            &limits
+        ),
+        Err(Error::Validation(_))
+    ));
+    let duplicate = br#"{"format":"cirnet.project","format_version":"1.0","format_version":"2.0"}"#;
+    assert!(matches!(
+        decode_manifest(duplicate, &limits),
+        Err(Error::JsonPolicy { .. })
+    ));
+}

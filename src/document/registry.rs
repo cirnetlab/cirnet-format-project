@@ -1,6 +1,6 @@
 use super::{DocumentKind, DocumentRead, EnvelopeVersion, read_structure};
 use crate::{DocumentEntry, Error, Limits, Result, manifest::check_token};
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 /// Codec selection uses the kind, the envelope representation and the exact owner schema.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -18,6 +18,18 @@ pub struct CodecRegistration {
     pub writable: bool,
     pub migratable: bool,
 }
+
+/// An owner-approved transition between two exact document codec keys.
+#[derive(Clone, Debug)]
+pub struct DocumentMigration {
+    pub source: CodecKey,
+    pub target: CodecKey,
+    /// Validate the exact source and proposed destination, including domain transformation rules.
+    pub validate_transition: MigrationValidator,
+}
+
+/// A domain-owned validator for one migration edge.
+pub type MigrationValidator = fn(&DocumentEntry, &[u8], &DocumentEntry, &[u8]) -> Result<()>;
 
 /// Capabilities describe what the core and a registered owner codec can do with this document.
 /// Domain support indicates an available validator. Call the validator before acting on content.
@@ -49,6 +61,7 @@ impl<'a> DocumentInspection<'a> {
 #[derive(Clone, Debug, Default)]
 pub struct CodecRegistry {
     registrations: HashMap<CodecKey, CodecRegistration>,
+    migrations: HashMap<CodecKey, HashMap<CodecKey, MigrationValidator>>,
 }
 
 impl CodecRegistry {
@@ -88,6 +101,98 @@ impl CodecRegistry {
 
     pub fn get(&self, key: &CodecKey) -> Option<&CodecRegistration> {
         self.registrations.get(key)
+    }
+
+    /// Register a directed migration between already registered, compatible owner codecs.
+    /// Multiple distinct destinations are allowed because each operation names its exact target.
+    pub fn register_migration(&mut self, migration: DocumentMigration) -> Result<()> {
+        let DocumentMigration {
+            source,
+            target,
+            validate_transition,
+        } = migration;
+        if source.kind != target.kind || source == target {
+            return Err(Error::Validation(
+                "invalid document migration endpoints".into(),
+            ));
+        }
+        if !self.get(&source).is_some_and(|codec| codec.migratable)
+            || !self
+                .get(&target)
+                .is_some_and(|codec| codec.migratable && codec.writable)
+        {
+            return Err(Error::Validation(
+                "migration endpoints require compatible owner codecs".into(),
+            ));
+        }
+        let mut pending = vec![&target];
+        let mut visited = HashSet::new();
+        while let Some(endpoint) = pending.pop() {
+            if endpoint == &source {
+                return Err(Error::Validation("document migration cycle".into()));
+            }
+            if visited.insert(endpoint)
+                && let Some(edges) = self.migrations.get(endpoint)
+            {
+                pending.extend(edges.keys());
+            }
+        }
+        match self.migrations.entry(source).or_default().entry(target) {
+            Entry::Vacant(entry) => {
+                entry.insert(validate_transition);
+                Ok(())
+            }
+            Entry::Occupied(_) => Err(Error::Validation(
+                "duplicate document migration transition".into(),
+            )),
+        }
+    }
+
+    /// Check an exact owner migration edge, preservation, and both domain validators.
+    pub fn validate_transition(
+        &self,
+        source: &DocumentEntry,
+        original: &[u8],
+        target: &DocumentEntry,
+        proposed: &[u8],
+        limits: &Limits,
+    ) -> Result<()> {
+        let before = read_structure(source, original, limits)?;
+        let after = read_structure(target, proposed, limits)?;
+        self.validate_decoded_transition((source, original, &before), (target, proposed, &after))?;
+        self.validate_decoded_write(target, proposed, &after, true)
+    }
+
+    pub(crate) fn validate_decoded_transition(
+        &self,
+        before: (&DocumentEntry, &[u8], &DocumentRead<'_>),
+        after: (&DocumentEntry, &[u8], &DocumentRead<'_>),
+    ) -> Result<()> {
+        let (source, original, previous) = before;
+        let (target, proposed, next) = after;
+        if source.id != target.id || source.kind != target.kind {
+            return Err(Error::Validation(
+                "document migration changed resource identity or kind".into(),
+            ));
+        }
+        let source_key = key_for(source, previous)
+            .ok_or_else(|| unsupported("document migration source", source))?;
+        let target_key = key_for(target, next)
+            .ok_or_else(|| unsupported("document migration target", target))?;
+        let transition = self
+            .migrations
+            .get(&source_key)
+            .and_then(|edges| edges.get(&target_key))
+            .ok_or_else(|| Error::Unsupported {
+                domain: "document migration transition",
+                version: format!("{} -> {}", source.schema_version, target.schema_version),
+            })?;
+        super::validate_document_transition(target, previous, next)?;
+        let codec = self
+            .get(&source_key)
+            .ok_or_else(|| unsupported("document migration source", source))?;
+        (codec.validate)(source, original)?;
+        transition(source, original, target, proposed)
     }
 
     /// Inspect the container and advertise owner capabilities. This does not run domain validation.
@@ -142,7 +247,8 @@ impl CodecRegistry {
         self.validate_decoded_write(entry, bytes, &document, false)
     }
 
-    /// Require opt-in for migration and writes, then validate the migrated bytes.
+    /// Check destination capabilities and domain bytes in isolation.
+    /// Use validate_transition to authorize an actual source-to-target migration.
     pub fn validate_migration(
         &self,
         entry: &DocumentEntry,
@@ -178,17 +284,21 @@ impl CodecRegistry {
         entry: &DocumentEntry,
         document: &DocumentRead<'_>,
     ) -> Option<&CodecRegistration> {
-        let envelope_version = match document {
-            DocumentRead::Envelope(_) => EnvelopeVersion::V1,
-            DocumentRead::LegacyCircuit(_) => EnvelopeVersion::LegacyCircuitGraph,
-            DocumentRead::Opaque(_) => return None,
-        };
-        self.get(&CodecKey {
-            kind: DocumentKind::from(entry.kind.as_str()),
-            envelope_version,
-            schema_version: entry.schema_version.clone(),
-        })
+        self.get(&key_for(entry, document)?)
     }
+}
+
+fn key_for(entry: &DocumentEntry, document: &DocumentRead<'_>) -> Option<CodecKey> {
+    let envelope_version = match document {
+        DocumentRead::Envelope(_) => EnvelopeVersion::V1,
+        DocumentRead::LegacyCircuit(_) => EnvelopeVersion::LegacyCircuitGraph,
+        DocumentRead::Opaque(_) => return None,
+    };
+    Some(CodecKey {
+        kind: DocumentKind::from(entry.kind.as_str()),
+        envelope_version,
+        schema_version: entry.schema_version.clone(),
+    })
 }
 
 fn unsupported(domain: &'static str, entry: &DocumentEntry) -> Error {

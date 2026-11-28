@@ -12,7 +12,8 @@ dependency alone requires no rewrite of a supported project.
    Supply a `ChangeSet` with the expected manifest revision and the digests
    of affected resources and declared read dependencies. Register the domain
    codecs that validate authored content. Restrict the retained
-   `Project::commit` entry point to metadata-only changes.
+   `Project::commit` entry point to project-level metadata. For registered
+   resource metadata, supply a read set to `Project::commit_metadata`.
 3. Keep ordinary single-document writes on `Project::save_document` when
    its revision and validator inputs cover the operation. Use a change set
    when the operation has hard dependencies or relies on other local files.
@@ -23,11 +24,13 @@ dependency alone requires no rewrite of a supported project.
 Use the intent appropriate to the file operation. An opaque unsupported
 document can relocate with its original bytes. Authoring a different envelope
 or schema requires a supported, explicit migration path. For a native
-migration, register migration-capable codecs for both source and destination.
-Use the format version detector before selecting a migration. An owner
-transition must produce its declared target, and the target must pass the
-applicable checks.
-Retain the source bytes and verify the result before replacing project state.
+migration, register migration-capable codecs for both representations and
+add an exact source-to-target `DocumentMigration` with
+`CodecRegistry::register_migration`. Its owner validator checks the original
+and proposed bytes together. The destination codec must also allow writes.
+Use `CodecRegistry::validate_transition` to qualify candidates before saving.
+A `WriteMode::Migrate` transaction also checks the registered edge, stable
+identity and extension preservation before publishing.
 
 ## Import legacy CircuitGraph
 

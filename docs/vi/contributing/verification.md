@@ -39,6 +39,17 @@ cargo doc --locked --all-features --no-deps
   giới hạn kho lưu trữ. Khi fuzz parser hoặc kho lưu trữ, ghi lại công cụ
   kiểm thử thuộc tính hoặc fuzz, corpus, đích, thời lượng và kết quả.
 
+Chạy bộ vector Draft 2020-12 chung bằng module Ajv 8.20.0 được phê duyệt
+và đối chiếu kết quả Rust bằng `cargo test --locked --test schema_conformance`.
+`cargo test --locked --test parser_mutations` chạy các ca phân tích cú pháp
+và thuộc tính có giới hạn, tái lập được. Chạy kiểm chứng ứng dụng mẫu với
+thư mục đầu ra mới.
+
+```sh
+node tests/check-schemas.cjs <path-to-ajv-dist-2020.js>
+cargo run --locked --release --example qualified_consumer -- <new-directory>
+```
+
 ## Kiểm tra tài liệu
 
 Từ thư mục gốc kho mã này, dùng `check-docs --product --root .` từ checkout
@@ -66,7 +77,9 @@ khác nhau. Ghi riêng chi phí đồng bộ hoặc sao chép khi đo được.
 ghi kết quả Foundation cục bộ trên Windows, nguồn gốc baseline và checksum
 artifact. [Lần chạy CI của baseline](https://github.com/cirnetlab/cirnet-format-project/actions/runs/46088261341)
 áp dụng cho [commit `cc3a257`](https://github.com/cirnetlab/cirnet-format-project/commit/cc3a257e03560943b531341d1520bf7f0892eb2c).
-Dùng lần chạy và phép đo mới để kiểm chứng crate 0.2.0.
+[Báo cáo kiểm chứng hardening 0.2.0](../../history/v0.2.0-hardening-qualification.md)
+ghi lại ứng viên đã kiểm tra trên Windows, các phạm vi còn thiếu kiểm chứng,
+so sánh benchmark và digest artifact.
 
 <!-- source: docs/en/contributing/verification.md -->
-<!-- source-sha256: 78600be48bd0765c5b707b3c0cea3f43d50aac1ccdc38939abd7bc690d2305dc -->
+<!-- source-sha256: d531508021657c4ec88652d1d5852704fd436259783775bfc16b49f215bb0314 -->

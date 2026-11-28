@@ -13,7 +13,7 @@ pub(crate) fn read<T: DeserializeOwned>(bytes: &[u8], limits: &Limits) -> Result
     Ok(serde_json::from_slice(bytes)?)
 }
 
-fn preflight(bytes: &[u8], limits: &Limits) -> Result<()> {
+pub(crate) fn preflight(bytes: &[u8], limits: &Limits) -> Result<()> {
     check_limit("JSON bytes", bytes.len() as u64, limits.max_json_bytes)?;
     std::str::from_utf8(bytes).map_err(|error| Error::JsonPolicy {
         offset: error.valid_up_to(),

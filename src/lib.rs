@@ -16,8 +16,8 @@ pub(crate) use serialization::json;
 pub use document::{
     CodecKey, CodecRegistration, CodecRegistry, DOCUMENT_ENVELOPE_FORMAT_VERSION,
     DOCUMENT_ENVELOPE_VERSION, DOCUMENT_FORMAT, Document, DocumentCapabilities, DocumentInspection,
-    DocumentKind, DocumentRead, EnvelopeVersion, decode_document, document_extension,
-    validate_document_transition,
+    DocumentKind, DocumentMigration, DocumentRead, EnvelopeVersion, MigrationValidator,
+    decode_document, document_extension, validate_document_transition,
 };
 pub use error::{Error, Result};
 pub use integrity::{Digest, hash_reader};

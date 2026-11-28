@@ -6,11 +6,19 @@ mod write;
 
 #[cfg(feature = "native")]
 mod native;
+#[cfg(feature = "native")]
+mod publication;
 
 #[cfg(feature = "native")]
 pub use native::{
     VerifiedPackage, export, export_file, export_file_with_progress, export_with_progress, verify,
     verify_with_progress,
+};
+
+#[cfg(feature = "native")]
+pub use publication::{
+    PackageDestinationState, PackagePublishError, PackagePublishOutcome,
+    inspect_package_destination,
 };
 
 use crate::{Digest, Error, Limits, Manifest, ProjectPath, Result, error::io};
@@ -167,11 +175,9 @@ fn verify_only_with<R: Read + Seek>(
     limits: Limits,
     operation: &mut Operation<'_>,
 ) -> Result<Manifest> {
-    read::Inspected::open(reader, &limits, operation)?.verify(
-        &limits,
-        &mut read::Discard,
-        operation,
-    )
+    read::Inspected::open(reader, &limits, operation)?
+        .verify(&limits, &mut read::Discard, operation)
+        .map(|(manifest, _)| manifest)
 }
 
 /// Write a deterministic ZIP to an empty seekable sink. On failure discard the sink.

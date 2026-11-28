@@ -1,16 +1,15 @@
 use super::{
-    Compression, MANIFEST_ENTRY, Operation, PackagePhase, PackageProgress, PackageSource,
-    limit_for, members, path,
+    Compression, Inventory, Item, MANIFEST_ENTRY, Operation, PackagePhase, PackageProgress,
+    PackagePublishError, PackagePublishOutcome, PackageSource, path,
+    publication::{Destination, install_file, sync_publication_directory},
     read::{Inspected, Stage},
     read_bounded, write,
 };
 use crate::{
     Digest, Error, Limits, Manifest, ProjectPath, Result,
-    error::{check_limit, io},
+    error::io,
     integrity::transfer_with,
-    storage::{
-        Project, open_regular, persist_new, resolve, sync_dir, temp_bytes, trusted_root, write_lock,
-    },
+    storage::{Project, open_regular, persist_new, resolve, temp_bytes, trusted_root, write_lock},
 };
 use std::{
     fs::{self, File, OpenOptions},
@@ -133,7 +132,7 @@ fn export_file_with(
     persist_new(temp, &parent.join(name.as_path()))
 }
 
-fn destination_parts(destination: &Path) -> Result<(&Path, ProjectPath)> {
+pub(super) fn destination_parts(destination: &Path) -> Result<(&Path, ProjectPath)> {
     let name = destination
         .file_name()
         .and_then(|name| name.to_str())
@@ -171,8 +170,9 @@ impl Stage for DirectoryStage {
 }
 
 pub struct VerifiedPackage {
-    directory: TempDir,
+    directory: Option<TempDir>,
     manifest: Manifest,
+    inventory: Inventory,
     limits: Limits,
 }
 
@@ -225,10 +225,11 @@ fn verify_with<R: Read + Seek>(
             .tempdir_in(trusted_root(scratch_parent)?)
             .map_err(|error| io("private package stage", error))?,
     );
-    let manifest = inspected.verify(&limits, &mut stage, operation)?;
+    let (manifest, inventory) = inspected.verify(&limits, &mut stage, operation)?;
     Ok(VerifiedPackage {
-        directory: stage.0,
+        directory: Some(stage.0),
         manifest,
+        inventory,
         limits,
     })
 }
@@ -240,116 +241,188 @@ impl VerifiedPackage {
 
     /// Publish to a new directory. The manifest is installed after all its resources.
     /// A destination on another volume is supported by bounded copies.
-    pub fn publish(self, destination: impl AsRef<Path>) -> Result<Project> {
-        self.publish_with(
+    pub fn publish(mut self, destination: impl AsRef<Path>) -> Result<Project> {
+        let outcome = self.publish_with(
             destination.as_ref(),
             &mut Operation::quiet(PackagePhase::Publish),
-        )
+        )?;
+        legacy_result(outcome)
     }
 
-    /// An interruption before manifest publication can leave unreferenced files and directories.
+    /// Publish with cooperative cancellation. Use [Self::publish_retryable] to keep
+    /// the staged package after a clean rejection or inspect post-publication warnings.
     pub fn publish_with_progress(
-        self,
+        mut self,
+        destination: impl AsRef<Path>,
+        progress: impl FnMut(PackageProgress<'_>) -> ControlFlow<()>,
+    ) -> Result<Project> {
+        legacy_result(self.publish_retryable(destination, progress)?)
+    }
+
+    /// Publish under a trusted local parent. The callback must not alter the import paths.
+    /// Clean rejections allow a retry using this verified stage. Publication and incomplete
+    /// cleanup consume the stage because linked files may become visible to other writers.
+    pub fn publish_retryable(
+        &mut self,
         destination: impl AsRef<Path>,
         mut progress: impl FnMut(PackageProgress<'_>) -> ControlFlow<()>,
-    ) -> Result<Project> {
+    ) -> std::result::Result<PackagePublishOutcome, PackagePublishError> {
         self.publish_with(
             destination.as_ref(),
             &mut Operation::new(PackagePhase::Publish, &mut progress),
         )
     }
 
-    fn publish_with(self, destination: &Path, operation: &mut Operation<'_>) -> Result<Project> {
+    fn publish_with(
+        &mut self,
+        destination: &Path,
+        operation: &mut Operation<'_>,
+    ) -> std::result::Result<PackagePublishOutcome, PackagePublishError> {
         operation.check(None, 0)?;
+        let verified = self.directory.as_ref().ok_or_else(|| {
+            Error::Validation("the verified package stage has already been consumed".into())
+        })?;
         let (parent, name) = destination_parts(destination)?;
         let parent = trusted_root(parent)?;
-        let root = parent.join(name.as_path());
-        fs::create_dir(&root).map_err(|error| {
-            if error.kind() == ErrorKind::AlreadyExists {
-                Error::Conflict(root.display().to_string())
-            } else {
-                io(root.display().to_string(), error)
-            }
-        })?;
-        sync_dir(&parent)?;
+        let mut destination = Destination::create(parent.join(name.as_path()))?;
         let manifest_name = path(MANIFEST_ENTRY);
-        for (name, doc) in members(&self.manifest)? {
-            if name != manifest_name {
-                self.publish_resource(&root, &name, doc.is_some(), operation)?;
+        let result = publish_verified(
+            verified.path(),
+            &self.inventory,
+            &mut destination,
+            &manifest_name,
+            operation,
+        );
+        match result {
+            Ok((revision, warning)) => {
+                self.directory.take();
+                Ok(PackagePublishOutcome {
+                    project: Project::from_parts(
+                        destination.root,
+                        manifest_name,
+                        self.manifest.clone(),
+                        revision,
+                        self.limits,
+                    ),
+                    warning,
+                })
             }
+            Err(cause) => match destination.rollback() {
+                Ok(()) => Err(cause.into()),
+                Err(cleanup) => {
+                    self.directory.take();
+                    Err(PackagePublishError::Incomplete {
+                        destination: destination.root,
+                        cause: Box::new(cause),
+                        cleanup: Box::new(cleanup),
+                    })
+                }
+            },
         }
-        operation.check(Some(MANIFEST_ENTRY), 0)?;
-        let bytes = read_bounded(
-            open_regular(self.directory.path(), &manifest_name)?,
-            self.limits.max_json_bytes,
-            MANIFEST_ENTRY,
-            |bytes| operation.check(Some(MANIFEST_ENTRY), bytes),
-        )?;
-        let file = temp_bytes(&root, &bytes)?;
-        let revision = Digest::of(&bytes);
-        let target = root.join(manifest_name.as_path());
-        operation.check(None, 0)?;
-        persist_new(file, &target)?;
-        Ok(Project::from_parts(
-            root,
-            manifest_name,
-            self.manifest,
-            revision,
-            self.limits,
-        ))
-    }
-
-    fn publish_resource(
-        &self,
-        root: &Path,
-        name: &ProjectPath,
-        document: bool,
-        operation: &mut Operation<'_>,
-    ) -> Result<()> {
-        let context = name.as_str();
-        operation.check(Some(context), 0)?;
-        let target = resolve(root, name, true)?;
-        let parent = target.parent().expect("target has parent");
-        let staged = open_regular(self.directory.path(), name)?;
-        let limit = limit_for(name, document, &self.limits);
-        let len = staged.metadata().map_err(|error| io(context, error))?.len();
-        check_limit("stream bytes", len, limit)?;
-
-        // Windows files can preserve source ACLs when linked. Keep that fast path
-        // within the same trusted parent; other destinations get locally created files.
-        let stage = self.directory.path();
-        let link = cfg!(unix) || stage.parent() == root.parent();
-        if link && link_staged(&stage.join(name.as_path()), &target, parent)? {
-            return operation.check(Some(context), len);
-        }
-
-        let mut temp = NamedTempFile::new_in(parent).map_err(|error| io(context, error))?;
-        transfer_with(staged, temp.as_file_mut(), limit, context, |bytes| {
-            operation.check(Some(context), bytes)
-        })?;
-        temp.as_file()
-            .sync_all()
-            .map_err(|error| io(context, error))?;
-        persist_new(temp, &target)
     }
 }
 
-// Linking avoids copying verified, file-synced bytes and refuses to replace a file.
-// Cross-volume and unsupported links fall back to the bounded local-copy path.
-fn link_staged(source: &Path, target: &Path, parent: &Path) -> Result<bool> {
-    match fs::hard_link(source, target) {
-        Ok(()) => {}
-        Err(error) if error.kind() == ErrorKind::AlreadyExists => {
-            return Err(Error::Conflict(target.display().to_string()));
-        }
-        Err(_) => return Ok(false),
+fn legacy_result(outcome: PackagePublishOutcome) -> Result<Project> {
+    match outcome.warning {
+        None => Ok(outcome.project),
+        Some(error) => Err(error),
     }
-    sync_dir(parent).map_err(|error| match error {
-        Error::Io { source, .. } => Error::Durability {
-            context: target.display().to_string(),
-            source,
-        },
-        other => other,
-    })?;
-    Ok(true)
+}
+
+fn publish_verified<'a>(
+    verified: &Path,
+    inventory: &'a Inventory,
+    destination: &mut Destination<'a>,
+    manifest_name: &ProjectPath,
+    operation: &mut Operation<'_>,
+) -> Result<(Digest, Option<Error>)> {
+    destination.start()?;
+    for (name, expected) in &inventory.entries {
+        if name != manifest_name {
+            publish_resource(verified, destination, name, expected, operation)?;
+        }
+    }
+    operation.check(Some(MANIFEST_ENTRY), 0)?;
+    let expected = &inventory.entries[manifest_name];
+    let bytes = read_bounded(
+        open_regular(verified, manifest_name)?,
+        expected.bytes,
+        MANIFEST_ENTRY,
+        |bytes| operation.check(Some(MANIFEST_ENTRY), bytes),
+    )?;
+    let revision = Digest::of(&bytes);
+    if bytes.len() as u64 != expected.bytes || revision != expected.sha256 {
+        return Err(Error::Integrity(MANIFEST_ENTRY.into()));
+    }
+    let file = temp_bytes(&destination.root, &bytes)?;
+    let target = destination.root.join(manifest_name.as_path());
+    operation.check(None, 0)?;
+    destination.ensure_path(&target)?;
+    install_file(file, &target)?;
+
+    // The manifest installation is the commit point. Keep it even if cleanup or sync fails.
+    let warning = sync_publication_directory(&destination.root, &target)
+        .and_then(|()| {
+            destination
+                .remove_marker()
+                .map_err(|error| Error::PublishedCleanup(Box::new(error)))
+        })
+        .err();
+    Ok((revision, warning))
+}
+
+fn publish_resource<'a>(
+    verified: &Path,
+    destination: &mut Destination<'a>,
+    name: &ProjectPath,
+    expected: &'a Item,
+    operation: &mut Operation<'_>,
+) -> Result<()> {
+    let context = name.as_str();
+    operation.check(Some(context), 0)?;
+    let target = destination.resource_path(name)?;
+    let parent = target.parent().expect("target has parent");
+    let staged = open_regular(verified, name)?;
+    let metadata = staged.metadata().map_err(|error| io(context, error))?;
+    if metadata.len() != expected.bytes {
+        return Err(Error::Integrity(name.to_string()));
+    }
+
+    // Windows files can preserve source ACLs when linked. Keep that fast path
+    // within the same trusted parent. Other destinations get locally created files.
+    let link = cfg!(unix) || verified.parent() == destination.root.parent();
+    if link && link_staged(&verified.join(name.as_path()), &target)? {
+        destination.record(target, metadata, expected)?;
+        return operation.check(Some(context), expected.bytes);
+    }
+
+    let mut temp = NamedTempFile::new_in(parent).map_err(|error| io(context, error))?;
+    let (count, sha256) = transfer_with(
+        staged,
+        temp.as_file_mut(),
+        expected.bytes,
+        context,
+        |bytes| operation.check(Some(context), bytes),
+    )?;
+    if count != expected.bytes || sha256 != expected.sha256 {
+        return Err(Error::Integrity(name.to_string()));
+    }
+    temp.as_file()
+        .sync_all()
+        .map_err(|error| io(context, error))?;
+    destination.ensure_path(&target)?;
+    let metadata = install_file(temp, &target)?;
+    destination.record(target, metadata, expected)
+}
+
+// Fast path after staging has verified and synced the source. The caller records
+// the link before attempting destination synchronization. Other filesystems fall back to copies.
+fn link_staged(source: &Path, target: &Path) -> Result<bool> {
+    match fs::hard_link(source, target) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => {
+            Err(Error::Conflict(target.display().to_string()))
+        }
+        Err(_) => Ok(false),
+    }
 }

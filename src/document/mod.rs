@@ -10,6 +10,7 @@ use serde_json::Value;
 mod registry;
 pub use registry::{
     CodecKey, CodecRegistration, CodecRegistry, DocumentCapabilities, DocumentInspection,
+    DocumentMigration, MigrationValidator,
 };
 
 pub const DOCUMENT_FORMAT: &str = "cirnet.document";

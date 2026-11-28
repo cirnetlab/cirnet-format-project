@@ -376,3 +376,195 @@ fn external_manifest_edit_before_publication_keeps_the_interrupted_journal() {
     assert_eq!(project.recover().unwrap().state, RecoveryState::Diverged);
     assert_eq!(project.manifest().documents.len(), 1);
 }
+
+#[test]
+fn compatibility_commit_directs_resource_metadata_to_the_revision_aware_api() {
+    let (_root, mut project) = prepared(false);
+    let mut next = project.manifest().clone();
+    next.documents[0].title = Some("New title".into());
+    assert!(matches!(
+        project.commit(next, Vec::<StagedFile<&[u8]>>::new()),
+        Err(Error::Validation(message)) if message.contains("commit_metadata")
+    ));
+}
+
+#[test]
+fn validated_read_tokens_cannot_commit_stale_registration_metadata() {
+    use cirnet_format_project::transaction::{
+        DurabilityStatus, PublicationStatus, ResourceChangeKind,
+    };
+
+    let (root, mut old) = prepared(false);
+    let codec = registry();
+    let input = old.read_set(&["drawing"]).unwrap();
+    let snapshot = input.document("drawing").unwrap();
+    assert_eq!(input.manifest_revision(), old.revision());
+    assert_eq!(input.resource_revision("drawing"), Some(&snapshot.revision));
+    assert!(matches!(
+        old.read_set(&["drawing", "drawing"]),
+        Err(Error::Validation(_))
+    ));
+    let bounded = Project::open(
+        root.path().join("lab.cirproj"),
+        Limits {
+            max_total_bytes: snapshot.bytes.len() as u64 - 1,
+            ..Limits::default()
+        },
+    )
+    .unwrap();
+    assert!(matches!(
+        bounded.read_set(&["drawing"]),
+        Err(Error::Limit { .. })
+    ));
+
+    let latest = Project::open(root.path().join("lab.cirproj"), Limits::default()).unwrap();
+    let changed = Document::new(
+        &latest.manifest().documents[0],
+        serde_json::json!({"value":711}),
+    )
+    .to_bytes(latest.limits())
+    .unwrap();
+    let saved = latest
+        .save_document_with_outcome("drawing", &snapshot.revision, &changed, |_, _| Ok(()))
+        .unwrap();
+    assert_eq!(saved.publication, PublicationStatus::Published);
+    assert_eq!(saved.manifest_revision, *old.revision());
+    assert_eq!(
+        saved.durability,
+        if cfg!(unix) {
+            DurabilityStatus::Confirmed
+        } else {
+            DurabilityStatus::PlatformLimited
+        }
+    );
+    assert_eq!(saved.resources[0].kind, ResourceChangeKind::Replaced);
+    assert_eq!(
+        saved.resources[0].revision,
+        Some(cirnet_format_project::Digest::of(&changed))
+    );
+    assert!(!saved.recovery_required && saved.completion_error.is_none());
+
+    assert!(matches!(old.validate_read_set(&input), Err(Error::Conflict(id)) if id == "drawing"));
+    let mut edits = old.manifest().clone();
+    edits.documents[0].title = Some("Checked title".into());
+    assert!(matches!(
+        old.commit_metadata(edits.clone(), &input),
+        Err(Error::Conflict(id)) if id == "drawing"
+    ));
+    assert!(old.manifest().documents[0].title.is_none());
+
+    let fresh = old.read_set(&["drawing"]).unwrap();
+    let mut conflicting = ChangeSet::<&[u8]>::new(old.revision().clone());
+    conflicting.include_read_set(&input).unwrap();
+    assert!(
+        matches!(conflicting.include_read_set(&fresh), Err(Error::Conflict(id)) if id == "drawing")
+    );
+    assert!(matches!(old.apply(conflicting, &codec), Err(Error::Conflict(id)) if id == "drawing"));
+    let outcome = old.commit_metadata(edits.clone(), &fresh).unwrap();
+    assert_eq!(outcome.publication, PublicationStatus::Published);
+    assert_eq!(outcome.manifest_revision, *old.revision());
+    assert_eq!(outcome.resources[0].kind, ResourceChangeKind::Metadata);
+    assert_eq!(
+        outcome.resources[0].revision.as_ref(),
+        fresh.resource_revision("drawing")
+    );
+    assert_eq!(old.manifest().documents[0].title, edits.documents[0].title);
+    assert_eq!(old.read_document("drawing").unwrap().bytes, changed);
+
+    let unchanged = old
+        .save_document_with_outcome(
+            "drawing",
+            fresh.resource_revision("drawing").unwrap(),
+            &changed,
+            |_, _| panic!("unchanged save validated"),
+        )
+        .unwrap();
+    assert_eq!(unchanged.publication, PublicationStatus::Unchanged);
+    assert_eq!(unchanged.durability, DurabilityStatus::NotApplicable);
+    assert!(unchanged.resources.is_empty());
+    assert!(matches!(
+        old.validate_read_set(&fresh),
+        Err(Error::Conflict(_))
+    ));
+}
+
+#[test]
+fn published_outcome_survives_blocked_cleanup_without_deleting_foreign_staging_files() {
+    use cirnet_format_project::transaction::{
+        DurabilityStatus, PublicationStatus, ResourceChangeKind,
+    };
+    let (root, mut project) = prepared(false);
+    let codec = registry();
+    let mut next = project.manifest().clone();
+    let added = entry("created", "created.cirsch");
+    let bytes = Document::new(&added, serde_json::json!({"value":42}))
+        .to_bytes(project.limits())
+        .unwrap();
+    let digest = cirnet_format_project::Digest::of(&bytes);
+    let mut create = ChangeSet::new(project.revision().clone());
+    let foreign = root.path().join(".cirnet-transaction").join("foreign-note");
+    create.write(ResourceWrite::new(
+        &added.id,
+        added.path.clone(),
+        WriteMode::Create,
+        Collision {
+            path: foreign.clone(),
+            bytes: Cursor::new(bytes),
+        },
+    ));
+    next.documents.push(added);
+    create.set_manifest(next);
+    let outcome = project.apply_with_outcome(create, &codec).unwrap();
+    assert_eq!(outcome.publication, PublicationStatus::Published);
+    assert_eq!(
+        outcome.durability,
+        if cfg!(unix) {
+            DurabilityStatus::Confirmed
+        } else {
+            DurabilityStatus::PlatformLimited
+        }
+    );
+    assert_eq!(outcome.manifest_revision, *project.revision());
+    assert_eq!(outcome.resources[0].kind, ResourceChangeKind::Created);
+    assert_eq!(outcome.resources[0].revision, Some(digest.clone()));
+    assert!(outcome.recovery_required);
+    assert!(matches!(
+        outcome.completion_error,
+        Some(Error::PublishedCleanup(_))
+    ));
+    let reopened = Project::open(root.path().join("lab.cirproj"), Limits::default()).unwrap();
+    assert_eq!(reopened.read_document("created").unwrap().revision, digest);
+    assert_eq!(reopened.recover().unwrap().state, RecoveryState::Diverged);
+    assert_eq!(fs::read(&foreign).unwrap(), b"other writer");
+    fs::remove_file(foreign).unwrap();
+    assert_eq!(reopened.recover().unwrap().state, RecoveryState::Published);
+    assert_eq!(reopened.recover().unwrap().state, RecoveryState::Clean);
+}
+
+#[test]
+fn compatibility_commit_allows_reordering_unchanged_registrations() {
+    let (_root, mut project) = prepared(false);
+    let codec = registry();
+    let mut next = project.manifest().clone();
+    let second = entry("second", "second.cirsch");
+    let bytes = Document::new(&second, serde_json::json!({"value":2}))
+        .to_bytes(project.limits())
+        .unwrap();
+    let mut create = ChangeSet::new(project.revision().clone());
+    create.write(ResourceWrite::new(
+        &second.id,
+        second.path.clone(),
+        WriteMode::Create,
+        bytes.as_slice(),
+    ));
+    next.documents.push(second);
+    create.set_manifest(next);
+    project.apply(create, &codec).unwrap();
+    let mut reordered = project.manifest().clone();
+    reordered.documents.reverse();
+    project
+        .commit(reordered, Vec::<StagedFile<&[u8]>>::new())
+        .unwrap();
+    assert_eq!(project.manifest().documents[0].id, "second");
+    assert_eq!(project.read_document("second").unwrap().bytes, bytes);
+}

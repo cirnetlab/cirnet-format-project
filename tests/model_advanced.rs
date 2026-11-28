@@ -274,3 +274,84 @@ fn graph_resolves_paths_and_keeps_hard_dependencies_apart_from_soft_cycles() {
         Err(Error::Validation(_))
     ));
 }
+
+#[test]
+fn document_migration_requires_an_exact_owner_approved_transition() {
+    use cirnet_format_project::DocumentMigration;
+
+    let limits = Limits::default();
+    let old = entry("drawing", "schematic", "drawing.cirsch", "test.1");
+    let mut new = old.clone();
+    new.schema_version = "test.2".into();
+    new.path = ProjectPath::new("drawing-v2.cirsch").unwrap();
+    let key = |version: &str| CodecKey {
+        kind: DocumentKind::Schematic,
+        envelope_version: EnvelopeVersion::V1,
+        schema_version: version.into(),
+    };
+    let mut registry = CodecRegistry::new();
+    for version in ["test.1", "test.2"] {
+        registry
+            .register(CodecRegistration {
+                key: key(version),
+                validate: |_, _| Ok(()),
+                writable: true,
+                migratable: true,
+            })
+            .unwrap();
+    }
+    let mut before = Document::new(&old, json!({"value": 12}));
+    before.extensions.insert("test.owner".into(), json!(7));
+    let old_bytes = before.to_bytes(&limits).unwrap();
+    let mut after = Document::new(&new, json!({"value_v2": 12}));
+    after.extensions = before.extensions;
+    let new_bytes = after.to_bytes(&limits).unwrap();
+
+    assert!(matches!(
+        registry.validate_transition(&old, &old_bytes, &new, &new_bytes, &limits),
+        Err(Error::Unsupported { .. })
+    ));
+
+    let migration = DocumentMigration {
+        source: key("test.1"),
+        target: key("test.2"),
+        validate_transition: |_, source, _, target| {
+            let old: serde_json::Value = serde_json::from_slice(source)?;
+            let new: serde_json::Value = serde_json::from_slice(target)?;
+            if old["payload"]["value"] == new["payload"]["value_v2"] {
+                Ok(())
+            } else {
+                Err(Error::Validation(
+                    "owner transition changed the value".into(),
+                ))
+            }
+        },
+    };
+    registry.register_migration(migration.clone()).unwrap();
+    assert!(registry.register_migration(migration.clone()).is_err());
+    assert!(
+        registry
+            .register_migration(DocumentMigration {
+                source: migration.target,
+                target: migration.source,
+                validate_transition: |_, _, _, _| Ok(()),
+            })
+            .is_err()
+    );
+    registry
+        .validate_transition(&old, &old_bytes, &new, &new_bytes, &limits)
+        .unwrap();
+    after.payload["value_v2"] = json!(13);
+    let wrong_value = after.to_bytes(&limits).unwrap();
+    assert!(matches!(
+        registry.validate_transition(&old, &old_bytes, &new, &wrong_value, &limits),
+        Err(Error::Validation(_))
+    ));
+    after.payload["value_v2"] = json!(12);
+    after.extensions.clear();
+    let lossy = after.to_bytes(&limits).unwrap();
+    assert!(matches!(
+        registry.validate_transition(&old, &old_bytes, &new, &lossy, &limits),
+        Err(Error::Validation(_))
+    ));
+}

@@ -173,19 +173,15 @@ fn native_cancelled_verification_cleans_stage() {
 
 #[cfg(feature = "native")]
 #[test]
-fn native_cancelled_publication_leaves_no_manifest() {
+fn native_cancelled_publication_clears_the_destination_for_retry() {
     use cirnet_format_project::package::{MANIFEST_ENTRY, verify};
 
     let (manifest, source) = project();
     let area = tempfile::tempdir().unwrap();
     let destination = area.path().join("destination");
-    let package = verify(
-        Cursor::new(package(&manifest, &source)),
-        area.path(),
-        Limits::default(),
-    )
-    .unwrap();
-    let result = package.publish_with_progress(&destination, |event| {
+    let bytes = package(&manifest, &source);
+    let verified = verify(Cursor::new(&bytes), area.path(), Limits::default()).unwrap();
+    let result = verified.publish_with_progress(&destination, |event| {
         if event.member == Some(MANIFEST_ENTRY) {
             ControlFlow::Break(())
         } else {
@@ -193,5 +189,195 @@ fn native_cancelled_publication_leaves_no_manifest() {
         }
     });
     assert!(matches!(result, Err(Error::Cancelled)));
+    assert!(
+        !destination.exists(),
+        "cancelled import still claims the destination"
+    );
+    let project = verify(Cursor::new(&bytes), area.path(), Limits::default())
+        .unwrap()
+        .publish(&destination)
+        .unwrap();
+    assert_eq!(project.manifest(), &manifest);
+}
+
+#[cfg(feature = "native")]
+#[test]
+fn interrupted_import_preserves_modified_and_foreign_content() {
+    use cirnet_format_project::package::{
+        MANIFEST_ENTRY, PackageDestinationState, PackagePublishError, inspect_package_destination,
+        verify,
+    };
+    use std::fs;
+
+    let (manifest, source) = project();
+    let area = tempfile::tempdir().unwrap();
+    let destination = area.path().join("destination");
+    let bytes = package(&manifest, &source);
+    let mut verified = verify(Cursor::new(&bytes), area.path(), Limits::default()).unwrap();
+    assert_eq!(
+        inspect_package_destination(&destination).unwrap(),
+        PackageDestinationState::Available
+    );
+
+    let modified = destination.join("assets/model.glb");
+    let outside = destination.join("operator-notes.txt");
+    let result = verified.publish_retryable(&destination, |event| {
+        if event.member == Some(MANIFEST_ENTRY) {
+            assert_eq!(
+                inspect_package_destination(&destination).unwrap(),
+                PackageDestinationState::PendingImport
+            );
+            fs::write(&modified, b"external edit").unwrap();
+            fs::write(&outside, b"keep this").unwrap();
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    assert!(matches!(
+        result,
+        Err(PackagePublishError::Incomplete { destination: retained, cause, .. })
+            if retained.ends_with("destination") && matches!(*cause, Error::Cancelled)
+    ));
+    assert_eq!(fs::read(&modified).unwrap(), b"external edit");
+    assert_eq!(fs::read(&outside).unwrap(), b"keep this");
     assert!(!destination.join(MANIFEST_ENTRY).exists());
+    assert_eq!(
+        inspect_package_destination(&destination).unwrap(),
+        PackageDestinationState::PendingImport
+    );
+    assert!(matches!(
+        verified.publish_retryable(area.path().join("another"), |_| ControlFlow::Continue(())),
+        Err(PackagePublishError::Rejected(Error::Validation(_)))
+    ));
+
+    let verified = verify(Cursor::new(&bytes), area.path(), Limits::default()).unwrap();
+    assert!(matches!(
+        verified.publish(&destination),
+        Err(Error::Conflict(_))
+    ));
+    assert_eq!(fs::read(&modified).unwrap(), b"external edit");
+}
+
+#[cfg(feature = "native")]
+#[test]
+fn cancellation_in_the_copy_loop_does_not_claim_destination() {
+    use cirnet_format_project::package::{
+        PackageDestinationState, PackagePublishError, inspect_package_destination, verify,
+    };
+
+    let (manifest, source) = project();
+    let scratch = tempfile::tempdir().unwrap();
+    let parent = tempfile::tempdir().unwrap();
+    let bytes = package(&manifest, &source);
+    let mut verified = verify(Cursor::new(&bytes), scratch.path(), Limits::default()).unwrap();
+    let destination = parent.path().join("destination");
+    let cancelled = verified.publish_retryable(&destination, |event| {
+        if event.member == Some("assets/model.glb") && event.bytes != 0 {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    assert!(matches!(
+        cancelled,
+        Err(PackagePublishError::Rejected(Error::Cancelled))
+    ));
+    assert_eq!(
+        inspect_package_destination(&destination).unwrap(),
+        PackageDestinationState::Available
+    );
+    let published = verified
+        .publish_retryable(&destination, |_| ControlFlow::Continue(()))
+        .unwrap();
+    assert!(published.warning.is_none());
+    assert_eq!(published.project.manifest(), &manifest);
+    assert_eq!(
+        inspect_package_destination(&destination).unwrap(),
+        PackageDestinationState::ManifestPresent
+    );
+}
+
+#[cfg(feature = "native")]
+#[test]
+fn abrupt_exit_leaves_an_identifiable_incomplete_import() {
+    use cirnet_format_project::package::{
+        MANIFEST_ENTRY, PackageDestinationState, inspect_package_destination, verify,
+    };
+    use std::{path::PathBuf, process::Command};
+
+    const CHILD_PARENT: &str = "CIRNET_TEST_IMPORT_EXIT_PARENT";
+    const TEST_NAME: &str = "abrupt_exit_leaves_an_identifiable_incomplete_import";
+    const EXIT_AT_MANIFEST: i32 = 71;
+    if let Some(parent) = std::env::var_os(CHILD_PARENT) {
+        let parent = PathBuf::from(parent);
+        let (manifest, source) = project();
+        let verified = verify(
+            Cursor::new(package(&manifest, &source)),
+            &parent,
+            Limits::default(),
+        )
+        .unwrap();
+        verified
+            .publish_with_progress(parent.join("destination"), |event| {
+                if event.member == Some(MANIFEST_ENTRY) {
+                    std::process::exit(EXIT_AT_MANIFEST);
+                }
+                ControlFlow::Continue(())
+            })
+            .unwrap();
+        panic!("publication did not reach the exit checkpoint");
+    }
+
+    let area = tempfile::tempdir().unwrap();
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", TEST_NAME])
+        .env(CHILD_PARENT, area.path())
+        .output()
+        .unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(EXIT_AT_MANIFEST),
+        "child stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let target = area.path().join("destination");
+    assert_eq!(
+        inspect_package_destination(&target).unwrap(),
+        PackageDestinationState::PendingImport
+    );
+    assert!(target.join("assets/model.glb").is_file());
+    assert!(!target.join(MANIFEST_ENTRY).exists());
+}
+
+#[cfg(feature = "native")]
+#[test]
+fn published_manifest_survives_marker_cleanup_failure() {
+    use cirnet_format_project::package::{
+        MANIFEST_ENTRY, PackageDestinationState, inspect_package_destination, verify,
+    };
+    use std::fs;
+
+    let (manifest, source) = project();
+    let area = tempfile::tempdir().unwrap();
+    let target = area.path().join("destination");
+    let bytes = package(&manifest, &source);
+    let mut verified = verify(Cursor::new(&bytes), area.path(), Limits::default()).unwrap();
+    let marker = target.join(".cirnet-incomplete-import");
+    let result = verified
+        .publish_retryable(&target, |event| {
+            if event.member.is_none() && marker.is_file() {
+                fs::write(&marker, b"externally modified marker").unwrap();
+            }
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+    assert!(matches!(result.warning, Some(Error::PublishedCleanup(_))));
+    assert_eq!(result.project.manifest(), &manifest);
+    assert!(target.join(MANIFEST_ENTRY).is_file());
+    assert_eq!(
+        inspect_package_destination(&target).unwrap(),
+        PackageDestinationState::ManifestPresent
+    );
+    assert_eq!(fs::read(marker).unwrap(), b"externally modified marker");
 }

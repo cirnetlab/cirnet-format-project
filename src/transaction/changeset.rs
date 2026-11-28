@@ -1,5 +1,6 @@
-use crate::{Digest, Manifest, ProjectPath};
-use std::collections::{BTreeMap, BTreeSet};
+use super::{ValidatedReadSet, revision::Expectations};
+use crate::{Digest, Error, Manifest, ProjectPath, Result};
+use std::collections::BTreeSet;
 
 /// The intent determines validation and publication rules.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,7 +34,7 @@ impl<R> ResourceWrite<R> {
 pub struct ChangeSet<R> {
     pub(crate) revision: Digest,
     pub(crate) manifest: Option<Manifest>,
-    pub(crate) expected: BTreeMap<String, Digest>,
+    pub(crate) expected: Expectations,
     pub(crate) writes: Vec<ResourceWrite<R>>,
     pub(crate) removals: BTreeSet<String>,
 }
@@ -43,7 +44,7 @@ impl<R> ChangeSet<R> {
         Self {
             revision: expected_manifest,
             manifest: None,
-            expected: BTreeMap::new(),
+            expected: Expectations::new(),
             writes: vec![],
             removals: BTreeSet::new(),
         }
@@ -56,6 +57,24 @@ impl<R> ChangeSet<R> {
     /// Check a resource read from the previous project, including caller-specific dependencies.
     pub fn expect(&mut self, id: impl Into<String>, revision: Digest) {
         self.expected.insert(id.into(), revision);
+    }
+
+    /// Carry over checked read tokens. Conflicting tokens leave the change set unchanged.
+    pub fn include_read_set(&mut self, set: &ValidatedReadSet) -> Result<()> {
+        if self.revision != set.manifest {
+            return Err(Error::Conflict("manifest revision".into()));
+        }
+        for (id, expected) in &set.expected {
+            if self
+                .expected
+                .get(id)
+                .is_some_and(|current| current != expected)
+            {
+                return Err(Error::Conflict(id.clone()));
+            }
+        }
+        self.expected.extend(set.expected.clone());
+        Ok(())
     }
 
     pub fn write(&mut self, resource: ResourceWrite<R>) {

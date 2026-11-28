@@ -16,7 +16,7 @@ payloads. Those domain engines can use the format through caller-supplied codecs
 | Version detection, explicit transitions and legacy CircuitGraph import | `src/migration/` |
 | Digests and package inventory | `src/integrity/` |
 | ZIP profile, preflight, reading, writing and verification | `src/package/` |
-| Revision checks, staged changes and recovery | `src/transaction/` |
+| Planning, read sets, revision checks, publication and recovery | `src/transaction/` |
 | Working project and filesystem operations | `src/storage/native/` |
 | Consumer-facing entry points, errors and input limits | `src/lib.rs`, `src/error.rs`, `src/limits.rs` |
 

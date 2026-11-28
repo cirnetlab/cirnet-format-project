@@ -10,6 +10,14 @@ trong tập phụ thuộc cứng bắc cầu của mỗi tài nguyên bị tác 
 lưu tài liệu, digest manifest có thể giữ nguyên. Kiểm tra revision tài
 nguyên phát hiện trường hợp dùng snapshot cũ.
 
+Dùng `Project::read_set` cho một tập tài nguyên cục bộ có giới hạn do bên
+gọi chọn. Phương thức trả về snapshot tài liệu và digest tài nguyên. Kiểm
+tra lại bằng `Project::validate_read_set` hoặc gắn vào changeset bằng
+`ChangeSet::include_read_set` để kiểm tra khi công bố. Bao gồm mọi tài nguyên
+được dùng để chỉnh sửa. Bộ lập kế hoạch dùng chung phép duyệt phụ thuộc
+cứng với đồ thị tài nguyên. Thư viện điều phối các bên ghi tuân theo khóa.
+Tiến trình bên ngoài vẫn có thể thay đổi hệ thống tệp giữa các lần kiểm tra.
+
 | Thao tác | Mục đích |
 | --- | --- |
 | Tạo | Đăng ký tài nguyên mới và đặt byte vào đường dẫn chưa sử dụng |
@@ -24,6 +32,22 @@ dụng cho metadata lưu trữ và envelope tài liệu. Cần xác thực do b�
 chuyên ngành cung cấp khi sửa nội dung tài liệu. Giữ nguyên byte tài liệu chưa
 được hỗ trợ khi di chuyển và giữ nội dung chưa hiểu khi chỉnh sửa tài liệu
 được hỗ trợ.
+
+## API ghi
+
+Dùng `Project::apply_with_outcome` cho changeset tường minh. Kết quả chứa
+trạng thái công bố, revision manifest hiện tại, ID tài nguyên bị tác động,
+digest kết quả khi có, trạng thái độ bền và phục hồi. Kết quả `Err` từ chối
+thao tác trước điểm công bố. Kết quả đã công bố có thể kèm lỗi hoàn tất,
+vì vậy cần đọc trạng thái trước khi thử lại. Trên hệ thống thiếu thao tác
+đồng bộ thư mục, kết quả báo `DurabilityStatus::PlatformLimited`. Lỗi trước
+công bố có thể để lại tệp đã chuẩn bị. Dùng `Project::inspect_recovery` để
+kiểm tra trước khi ghi tiếp. `Project::apply` duy trì kết quả tương thích. Dùng `Project::save_document_with_outcome` để ghi một tài
+liệu khi validator và revision truyền vào đủ cho thao tác.
+
+Dùng `Project::commit` cho metadata cấp dự án. Sửa metadata của tài nguyên
+đã đăng ký cần revision từ snapshot dùng khi chỉnh sửa. Truyền tập đọc cho
+`Project::commit_metadata` hoặc dùng changeset tường minh.
 
 ## Công bố và phục hồi
 
@@ -63,4 +87,4 @@ Mở lại manifest và các tệp bị tác động sau lỗi có kết quả c
 ghi tiếp.
 
 <!-- source: docs/en/architecture/transactions.md -->
-<!-- source-sha256: ff7f4ef653e30da42cf52df1f2e45d97d0227e04d5e2dc82c164bbc63ffba4ba -->
+<!-- source-sha256: 8622d71d133a3166801ea4917e5ae364316fe6320c2104715e0ea8246e038a26 -->

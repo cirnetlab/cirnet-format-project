@@ -1,0 +1,485 @@
+{
+  "archive_manifest": "{\"format\":\"cirnet.project\",\"format_version\":\"1.0\",\"project_id\":\"lab\",\"name\":\"Conformance\",\"domains\":[\"electronics\"]}",
+  "cases": [
+    {
+      "name": "minimal manifest",
+      "schema": "manifest",
+      "schema_accepts": true,
+      "runtime": "accept",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.project",
+          "format_version": "1.0",
+          "project_id": "lab",
+          "name": "Conformance",
+          "domains": [
+            "electronics"
+          ]
+        }
+      }
+    },
+    {
+      "name": "manifest ID at 128-character boundary",
+      "schema": "manifest",
+      "schema_accepts": true,
+      "runtime": "accept",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.project",
+          "format_version": "1.0",
+          "project_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "name": "Conformance",
+          "domains": [
+            "electronics"
+          ]
+        }
+      }
+    },
+    {
+      "name": "manifest ID past 128-character boundary",
+      "schema": "manifest",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.project",
+          "format_version": "1.0",
+          "project_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "name": "Conformance",
+          "domains": [
+            "electronics"
+          ]
+        }
+      }
+    },
+    {
+      "name": "unknown manifest property",
+      "schema": "manifest",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.project",
+          "format_version": "1.0",
+          "project_id": "lab",
+          "name": "Conformance",
+          "domains": [
+            "electronics"
+          ],
+          "extra": "value"
+        }
+      }
+    },
+    {
+      "name": "manifest domains must be distinct",
+      "schema": "manifest",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.project",
+          "format_version": "1.0",
+          "project_id": "lab",
+          "name": "Conformance",
+          "domains": [
+            "electronics",
+            "electronics"
+          ]
+        }
+      }
+    },
+    {
+      "name": "portable root rules extend schema path syntax",
+      "schema": "manifest",
+      "schema_accepts": true,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.project",
+          "format_version": "1.0",
+          "project_id": "lab",
+          "name": "Conformance",
+          "domains": [
+            "electronics"
+          ],
+          "assets": [
+            {
+              "id": "model",
+              "path": "assets/../model.glb",
+              "media_type": "model/gltf-binary"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "resource references require existing IDs",
+      "schema": "manifest",
+      "schema_accepts": true,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.project",
+          "format_version": "1.0",
+          "project_id": "lab",
+          "name": "Conformance",
+          "domains": [
+            "electronics"
+          ],
+          "links": [
+            {
+              "relationship": "reference",
+              "target": "missing"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "runtime rejects a duplicate key hidden by object parsing",
+      "schema": "manifest",
+      "schema_accepts": true,
+      "runtime": "reject",
+      "input": {
+        "type": "raw",
+        "value": "{\"format\":\"cirnet.project\",\"format_version\":\"1.0\",\"project_id\":\"lab\",\"name\":\"Conformance\",\"domains\":[\"electronics\"],\"project_i\\u0064\":\"lab\"}"
+      }
+    },
+    {
+      "name": "unsupported manifest profile",
+      "schema": "manifest",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.project",
+          "format_version": "2.0",
+          "project_id": "lab",
+          "name": "Conformance",
+          "domains": [
+            "electronics"
+          ]
+        }
+      }
+    },
+    {
+      "name": "minimal document envelope",
+      "schema": "document",
+      "schema_accepts": true,
+      "runtime": "accept",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.document",
+          "format_version": "1.0",
+          "id": "drawing",
+          "kind": "schematic",
+          "schema_version": "test.1",
+          "payload": {
+            "resistance": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "valid unknown extension preserved",
+      "schema": "document",
+      "schema_accepts": true,
+      "runtime": "accept",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.document",
+          "format_version": "1.0",
+          "id": "drawing",
+          "kind": "schematic",
+          "schema_version": "test.1",
+          "payload": {
+            "resistance": 10
+          },
+          "extensions": {
+            "owner.example": {
+              "precision": "kept"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "document missing payload",
+      "schema": "document",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.document",
+          "format_version": "1.0",
+          "id": "drawing",
+          "kind": "schematic",
+          "schema_version": "test.1"
+        }
+      }
+    },
+    {
+      "name": "document invalid extension namespace",
+      "schema": "document",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.document",
+          "format_version": "1.0",
+          "id": "drawing",
+          "kind": "schematic",
+          "schema_version": "test.1",
+          "payload": {
+            "resistance": 10
+          },
+          "extensions": {
+            "single": true
+          }
+        }
+      }
+    },
+    {
+      "name": "schema-valid document mismatched with manifest registry",
+      "schema": "document",
+      "schema_accepts": true,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.document",
+          "format_version": "1.0",
+          "id": "another-drawing",
+          "kind": "schematic",
+          "schema_version": "test.1",
+          "payload": {
+            "resistance": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "unsupported envelope version retained opaque",
+      "schema": "document",
+      "schema_accepts": false,
+      "runtime": "opaque",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.document",
+          "format_version": "2.0",
+          "id": "drawing",
+          "kind": "schematic",
+          "schema_version": "test.1",
+          "payload": {
+            "resistance": 10
+          }
+        }
+      }
+    },
+    {
+      "name": "legacy CircuitGraph 1.0 is handled outside envelope schema",
+      "schema": "document",
+      "schema_accepts": false,
+      "runtime": "accept",
+      "input": {
+        "type": "fixture",
+        "value": "legacy-v1.0.json"
+      },
+      "legacy_version": "1.0"
+    },
+    {
+      "name": "legacy CircuitGraph 1.1 is handled outside envelope schema",
+      "schema": "document",
+      "schema_accepts": false,
+      "runtime": "accept",
+      "input": {
+        "type": "fixture",
+        "value": "legacy-v1.1.json"
+      },
+      "legacy_version": "1.1"
+    },
+    {
+      "name": "legacy CircuitGraph 1.2 is handled outside envelope schema",
+      "schema": "document",
+      "schema_accepts": false,
+      "runtime": "accept",
+      "input": {
+        "type": "fixture",
+        "value": "legacy-v1.2.json"
+      },
+      "legacy_version": "1.2"
+    },
+    {
+      "name": "minimal inventory verified against package members",
+      "schema": "integrity",
+      "schema_accepts": true,
+      "runtime": "accept",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.package",
+          "format_version": "1.0",
+          "algorithm": "sha256",
+          "entries": {
+            "project.cirproj": {
+              "bytes": 116,
+              "sha256": "565d608966267855ec923d9afe74bfb7b3db997441ed99ddd47d6012d8d3ca38"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "maximum representable ZIP32 size cannot match small member",
+      "schema": "integrity",
+      "schema_accepts": true,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.package",
+          "format_version": "1.0",
+          "algorithm": "sha256",
+          "entries": {
+            "project.cirproj": {
+              "bytes": 4294967294,
+              "sha256": "565d608966267855ec923d9afe74bfb7b3db997441ed99ddd47d6012d8d3ca38"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "inventory size exceeds ZIP32 schema bound",
+      "schema": "integrity",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.package",
+          "format_version": "1.0",
+          "algorithm": "sha256",
+          "entries": {
+            "project.cirproj": {
+              "bytes": 4294967295,
+              "sha256": "565d608966267855ec923d9afe74bfb7b3db997441ed99ddd47d6012d8d3ca38"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "inventory missing manifest entry",
+      "schema": "integrity",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.package",
+          "format_version": "1.0",
+          "algorithm": "sha256",
+          "entries": {}
+        }
+      }
+    },
+    {
+      "name": "inventory does not describe itself",
+      "schema": "integrity",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.package",
+          "format_version": "1.0",
+          "algorithm": "sha256",
+          "entries": {
+            "project.cirproj": {
+              "bytes": 116,
+              "sha256": "565d608966267855ec923d9afe74bfb7b3db997441ed99ddd47d6012d8d3ca38"
+            },
+            "integrity.json": {
+              "bytes": 116,
+              "sha256": "565d608966267855ec923d9afe74bfb7b3db997441ed99ddd47d6012d8d3ca38"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "digest has valid syntax but fails runtime integrity",
+      "schema": "integrity",
+      "schema_accepts": true,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.package",
+          "format_version": "1.0",
+          "algorithm": "sha256",
+          "entries": {
+            "project.cirproj": {
+              "bytes": 116,
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "inventory digest alphabet is lowercase hex",
+      "schema": "integrity",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.package",
+          "format_version": "1.0",
+          "algorithm": "sha256",
+          "entries": {
+            "project.cirproj": {
+              "bytes": 116,
+              "sha256": "565D608966267855EC923D9AFE74BFB7B3DB997441ED99DDD47D6012D8D3CA38"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "unsupported inventory digest algorithm",
+      "schema": "integrity",
+      "schema_accepts": false,
+      "runtime": "reject",
+      "input": {
+        "type": "json",
+        "value": {
+          "format": "cirnet.package",
+          "format_version": "1.0",
+          "algorithm": "sha512",
+          "entries": {
+            "project.cirproj": {
+              "bytes": 116,
+              "sha256": "565d608966267855ec923d9afe74bfb7b3db997441ed99ddd47d6012d8d3ca38"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

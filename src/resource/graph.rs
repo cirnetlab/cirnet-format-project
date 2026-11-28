@@ -99,17 +99,22 @@ impl<'a> ResourceGraph<'a> {
     /// Hard dependencies in breadth-first discovery order, excluding the starting resource.
     pub fn dependency_closure(&self, id: &str) -> Result<Vec<Resource<'a>>> {
         let root = self.get(id).ok_or_else(|| Error::Missing(id.into()))?;
-        let mut seen = HashSet::from([root.id()]);
-        let mut pending = VecDeque::from([root.id()]);
         let mut dependencies = Vec::new();
-        while let Some(owner) = pending.pop_front() {
-            for edge in self.outgoing(ResourceOwner::Document(owner)) {
-                if edge.link.relationship.is_hard() && seen.insert(edge.target.id()) {
-                    pending.push_back(edge.target.id());
-                    dependencies.push(edge.target);
+        walk_hard_dependencies(
+            [root],
+            Resource::id,
+            |owner| {
+                self.outgoing(ResourceOwner::Document(owner.id()))
+                    .iter()
+                    .map(|edge| (edge.link.relationship, edge.target))
+            },
+            |resource| {
+                if resource.id() != root.id() {
+                    dependencies.push(*resource);
                 }
-            }
-        }
+                Ok(())
+            },
+        )?;
         Ok(dependencies)
     }
 
@@ -228,6 +233,34 @@ impl<'a> ResourceGraph<'a> {
         }
         Ok(())
     }
+}
+
+/// Shared hard-dependency traversal over either validated graph edges or manifest rows.
+pub(crate) fn walk_hard_dependencies<'a, N, I>(
+    roots: impl IntoIterator<Item = N>,
+    key: impl Fn(&N) -> &'a str,
+    links: impl Fn(&N) -> I,
+    mut visit: impl FnMut(&N) -> Result<()>,
+) -> Result<()>
+where
+    I: IntoIterator<Item = (Relationship, N)>,
+{
+    let mut seen = HashSet::new();
+    let mut pending = VecDeque::new();
+    for root in roots {
+        if seen.insert(key(&root)) {
+            pending.push_back(root);
+        }
+    }
+    while let Some(owner) = pending.pop_front() {
+        visit(&owner)?;
+        for (relationship, target) in links(&owner) {
+            if relationship.is_hard() && seen.insert(key(&target)) {
+                pending.push_back(target);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn hard_document_target<'a>(edge: &ResourceEdge<'a>) -> Option<&'a str> {

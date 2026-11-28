@@ -10,6 +10,14 @@ hard dependency closure of each affected resource. A document-only save
 can leave the manifest digest stable. Resource revision checks catch
 those stale snapshots.
 
+Use `Project::read_set` for a bounded, caller-selected set of local resources.
+It returns document snapshots and resource digests. Check it again with
+`Project::validate_read_set`, or attach it with `ChangeSet::include_read_set`
+to check those reads at publication. Include each resource used to make the
+edit. The planner shares hard dependency traversal with the resource graph.
+The library coordinates cooperating writers. External filesystem modification
+can still occur between file checks.
+
 | Operation | Intent |
 | --- | --- |
 | Create | Register a new resource and place bytes at an unused path |
@@ -23,6 +31,24 @@ resources and declared reads. Structural validation applies to persisted
 metadata and document envelopes. An authored document change requires
 domain-owned validation. Preserve unsupported document bytes on relocation,
 and retain unknown content during edits to supported documents.
+
+## Write APIs
+
+Use `Project::apply_with_outcome` for an explicit change set. The outcome
+carries publication status, the current manifest revision, affected resource
+IDs and resulting digests where available, durability and recovery status.
+A returned `Err` rejects the operation before its publication point. A
+published outcome may carry a completion error, so read its status before
+retrying. On hosts without directory synchronization, the outcome reports
+`DurabilityStatus::PlatformLimited`. An error before publication can
+leave staged files. Use `Project::inspect_recovery` to check before another write.
+`Project::apply` keeps the compatibility result. Use
+`Project::save_document_with_outcome` for a single-document write when
+its validator and revision inputs cover the operation.
+
+Use `Project::commit` for project-level metadata. Registered resource metadata
+changes require revisions from the edit snapshot. Pass a read set to
+`Project::commit_metadata`, or use an explicit change set.
 
 ## Publication and recovery
 

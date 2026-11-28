@@ -9,18 +9,24 @@
 | WASM | Bắt đầu với `--no-default-features` cho API byte hoặc đánh giá feature package cho đầu vào trong bộ nhớ hỗ trợ seek. Kiểm chứng đích đã chọn và triển khai lưu trữ trình duyệt ở bên tiêu thụ. Dùng giải mã không mất dữ liệu cho payload cần chính xác. |
 
 Mở snapshot đang làm việc bằng `Project::open`. Dùng ID trong sổ đăng ký làm
-khóa lựa chọn ổn định. Lấy revision của mỗi tài nguyên bị tác động hoặc được
-dùng khi đọc nội dung của nó. Tạo `ChangeSet` cho lần ghi native và dùng
-`Project::apply` với sổ đăng ký codec tường minh cho thao tác sửa nội dung tài
-liệu. Hiển thị kết quả đọc và kiểm tra cấu trúc riêng với khả năng chỉnh sửa.
-Xem [Giao dịch](../architecture/transactions.md).
+khóa lựa chọn ổn định. Lấy tài liệu và revision tài nguyên cục bộ dùng
+cho lần chỉnh sửa bằng `Project::read_set`. Gắn token vào `ChangeSet` rồi
+dùng `Project::apply_with_outcome` cùng sổ đăng ký codec của bên sở hữu.
+Đọc lại khi có xung đột và kiểm tra kết quả đã công bố trước khi thử lại
+sau cảnh báo độ bền hoặc dọn dẹp. Hiển thị kiểm tra cấu trúc riêng với
+khả năng chỉnh sửa. Xem [Giao dịch](../architecture/transactions.md).
 
 Với `.cirpkg`, `package::inspect` đọc metadata và `package::verify_only` xác
 minh kho lưu trữ `Read + Seek` mà không truy cập đích. Dùng
 `package::export_from` với `PackageSource` và đích `Write + Seek` để xuất
 qua các nền tảng. `package::verify` native chuẩn bị bản nhập trong vùng tạm.
-Công bố kết quả đã xác minh vào thư mục mới do bên gọi kiểm soát.
-Xem [Bảo mật gói](../architecture/package-security.md).
+Công bố kết quả đã xác minh vào thư mục mới do bên gọi kiểm soát bằng
+`publish_retryable`. Xem [Bảo mật gói](../architecture/package-security.md).
+
+[Ứng dụng Rust độc lập](../../../examples/qualified_consumer.rs) chạy thử
+các API này với schema chuyên ngành dành riêng cho kiểm thử. Ví dụ kiểm
+chứng quy trình thư viện cục bộ. Tích hợp sản phẩm, lưu trữ trình duyệt và
+cấp quyền thực thi cần bằng chứng riêng.
 
 Contracts sở hữu các profile CircuitGraph dùng chung. Chuyển byte gốc cho
 trình xác thực của bên sở hữu và tuân theo quy tắc chỉnh sửa của họ. Project
@@ -30,4 +36,4 @@ thuộc Remote, còn bảo vệ tại trạm thuộc Hardware.
 Xem [bảng phân quyền sở hữu](https://github.com/cirnetlab/cirnet-rules/blob/master/en/references/architecture-routing.md).
 
 <!-- source: docs/en/guides/integration.md -->
-<!-- source-sha256: 13c06193f69855863a606dd32cc07fdc4bf194878b43ebf30c610f50f75b742a -->
+<!-- source-sha256: 8be0bf3d33b84bc2b9b61abf7e08cd7852e6165fbd4baac92ade4b00d21311f0 -->

@@ -8,6 +8,27 @@
 
 - Standardize shared English major-version changelog navigation and add
   paired English and Vietnamese documentation maintenance guides.
+- Decode current manifests directly after strict JSON preflight. Retain
+  version diagnostics and the full resource graph validation.
+
+### Added
+
+- Add bounded validated read sets, structured transaction outcomes and an
+  explicit path for changing registered resource metadata.
+- Register exact owner migration edges and qualify a standalone Rust consumer.
+- Compare Draft 2020-12 schema vectors with runtime behavior and exercise
+  bounded parser, archive and recovery mutations.
+
+### Fixed
+
+- Clean up operation-owned package files after pre-publication cancellation
+  when ownership is verifiable. Report retained destinations and allow
+  retry from a verified stage after clean rejection.
+
+### Security
+
+- Require migration authorization for the exact source and destination
+  codecs, with owner checks on the original and proposed document bytes.
 
 ## v0.2.0 — Development candidate
 

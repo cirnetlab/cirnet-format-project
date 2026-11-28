@@ -27,6 +27,13 @@ pub enum Error {
     PublishedCleanup(#[source] Box<Error>),
     #[error("package operation cancelled")]
     Cancelled,
+    #[error("incomplete package import at {destination:?}: {cause}; cleanup: {cleanup}")]
+    IncompletePackageImport {
+        destination: std::path::PathBuf,
+        #[source]
+        cause: Box<Error>,
+        cleanup: Box<Error>,
+    },
     #[error("integrity check failed: {0}")]
     Integrity(String),
     #[error("invalid portable ZIP: {0}")]
