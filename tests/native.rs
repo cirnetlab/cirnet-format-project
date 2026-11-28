@@ -1,10 +1,70 @@
 #![cfg(feature = "native")]
 use cirnet_format_project::package::{Compression, export, verify};
 use cirnet_format_project::storage::{Project, StagedFile};
+use cirnet_format_project::transaction::{ChangeSet, ResourceWrite, WriteMode};
 use cirnet_format_project::{
     AssetEntry, Digest, Document, DocumentEntry, Error, Limits, Manifest, ProjectPath,
 };
-use std::{fs, io::Cursor};
+use cirnet_format_project::{
+    CodecKey, CodecRegistration, CodecRegistry, DocumentKind, EnvelopeVersion,
+};
+use std::{
+    fs,
+    io::{Cursor, Read},
+};
+
+fn fixture_registry() -> CodecRegistry {
+    let mut registry = CodecRegistry::new();
+    registry
+        .register(CodecRegistration {
+            key: CodecKey {
+                kind: DocumentKind::Schematic,
+                envelope_version: EnvelopeVersion::V1,
+                schema_version: "test.1".into(),
+            },
+            validate: |_, _| Ok(()),
+            writable: true,
+            migratable: false,
+        })
+        .unwrap();
+    registry
+}
+
+fn create_fixture(project: &mut Project, manifest: Manifest, document: &[u8], asset: &[u8]) {
+    let mut change = ChangeSet::new(project.revision().clone());
+    change.write(ResourceWrite::new(
+        &manifest.documents[0].id,
+        manifest.documents[0].path.clone(),
+        WriteMode::Create,
+        document,
+    ));
+    change.write(ResourceWrite::new(
+        &manifest.assets[0].id,
+        manifest.assets[0].path.clone(),
+        WriteMode::Create,
+        asset,
+    ));
+    change.set_manifest(manifest);
+    project.apply(change, &fixture_registry()).unwrap();
+}
+
+fn replace_asset(
+    project: &mut Project,
+    next: Manifest,
+    reader: impl Read,
+) -> cirnet_format_project::Result<()> {
+    let id = &next.assets[0].id;
+    let mut change = ChangeSet::new(project.revision().clone());
+    change.expect(id, project.resource_revision(id)?);
+    change.write(ResourceWrite::new(
+        id,
+        next.assets[0].path.clone(),
+        WriteMode::Replace,
+        reader,
+    ));
+    change.set_manifest(next);
+    project.apply(change, &fixture_registry())
+}
 
 fn sample() -> Manifest {
     let mut manifest = Manifest::new("lab-1", "Portable lab", vec!["electronics".into()]);
@@ -41,15 +101,7 @@ fn staged_commit_and_verified_package_round_trip() {
         .unwrap();
     let binary = vec![23; 131_072];
     let stale = Project::open(root.join("lab.cirproj"), limits).unwrap();
-    project
-        .commit(
-            manifest.clone(),
-            vec![
-                StagedFile::new(doc.path.clone(), &bytes[..]),
-                StagedFile::new(manifest.assets[0].path.clone(), &binary[..]),
-            ],
-        )
-        .unwrap();
+    create_fixture(&mut project, manifest.clone(), &bytes, &binary);
     let mut stale = stale;
     assert!(matches!(
         stale.commit(stale.manifest().clone(), Vec::<StagedFile<&[u8]>>::new()),
@@ -192,15 +244,7 @@ fn failed_document_validation_and_interrupted_commit_leave_the_previous_manifest
     let bytes = Document::new(doc, serde_json::json!({"record":1}))
         .to_bytes(&limits)
         .unwrap();
-    project
-        .commit(
-            manifest.clone(),
-            vec![
-                StagedFile::new(doc.path.clone(), &bytes[..]),
-                StagedFile::new(manifest.assets[0].path.clone(), &b"model"[..]),
-            ],
-        )
-        .unwrap();
+    create_fixture(&mut project, manifest.clone(), &bytes, b"model");
     let original = fs::read(&path).unwrap();
     let revision = Digest::of(&bytes);
     let changed = Document::new(doc, serde_json::json!({"record":2}))
@@ -238,13 +282,7 @@ fn failed_document_validation_and_interrupted_commit_leave_the_previous_manifest
     next.assets[0].path = ProjectPath::new("assets/new.glb").unwrap();
     let collision = workspace.path().join("assets/new.glb");
     assert!(matches!(
-        project.commit(
-            next.clone(),
-            vec![StagedFile::new(
-                next.assets[0].path.clone(),
-                Interrupt(collision.clone())
-            )]
-        ),
+        replace_asset(&mut project, next.clone(), Interrupt(collision.clone())),
         Err(Error::Conflict(_))
     ));
     assert_eq!(fs::read(&path).unwrap(), original);
@@ -252,12 +290,8 @@ fn failed_document_validation_and_interrupted_commit_leave_the_previous_manifest
     assert_eq!(Project::open(&path, limits).unwrap().manifest(), &manifest);
 
     next.assets[0].path = ProjectPath::new("assets/renamed.glb").unwrap();
-    project
-        .commit(
-            next.clone(),
-            vec![StagedFile::new(next.assets[0].path.clone(), &b"new"[..])],
-        )
-        .unwrap();
+    project.recover().unwrap();
+    replace_asset(&mut project, next.clone(), &b"new"[..]).unwrap();
     assert_eq!(Project::open(&path, limits).unwrap().manifest(), &next);
     assert_eq!(
         fs::read(workspace.path().join("assets/model.glb")).unwrap(),

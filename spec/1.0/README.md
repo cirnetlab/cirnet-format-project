@@ -37,6 +37,25 @@ Single disk, ZIP32, no outer ZIP comment, plaintext regular-file entries only, S
 
 The ZIP includes one `project.cirproj`, all registered local documents and native assets, and one `integrity.json`. No directory entries, data descriptors, duplicate names, overlapping entry ranges, undeclared data gaps or unrelated files. Local and central headers must agree on name, flags, method, CRC and sizes. Membership is explicit. A file present only in the working directory stays outside the archive. The inventory identifies `cirnet.package` version `1.0`, algorithm `sha256` and an object keyed by member path. Each item states the exact uncompressed byte count and the lowercase hexadecimal SHA-256 of those exact bytes. The inventory excludes itself. SHA-256 verifies content consistency and carries no publisher identity or authorization. Inspect checks manifest integrity and declared membership. Verify streams every member and validates document/container headers before an import destination is touched.
 
+## Implementation guidance
+
+The 0.2.0 crate keeps the Manifest, Envelope and Package Profile at wire
+version 1.0. Existing schema and fixture contents are unchanged. A
+conforming envelope or package confirms its container structure.
+Editing a domain document requires an owner validator for its exact kind,
+envelope version and domain schema version.
+
+For working directories, use document and dependency revisions with the
+manifest revision to protect edits on stale snapshots. Manifest-changing
+transactions publish resource bytes at unused paths before replacing the
+manifest. Ordinary saves can advance the resource revision independently.
+Read or copy an unsupported document as original bytes. An explicit
+migration must validate both the transition and its emitted content.
+
+See [Transactions and recovery](../../docs/en/architecture/transactions.md)
+and the [Package security](../../docs/en/architecture/package-security.md)
+guide for the 0.2.0 API behavior and local storage guarantees.
+
 ## Defaults and failures
 
 | Limit | Default |

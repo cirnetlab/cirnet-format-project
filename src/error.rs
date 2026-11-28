@@ -21,6 +21,12 @@ pub enum Error {
     Missing(String),
     #[error("content conflict at {0}")]
     Conflict(String),
+    #[error("project has an interrupted transaction; inspect recovery before saving")]
+    RecoveryRequired,
+    #[error("content published; transaction cleanup remains: {0}")]
+    PublishedCleanup(#[source] Box<Error>),
+    #[error("package operation cancelled")]
+    Cancelled,
     #[error("integrity check failed: {0}")]
     Integrity(String),
     #[error("invalid portable ZIP: {0}")]

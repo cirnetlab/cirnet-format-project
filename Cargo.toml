@@ -1,6 +1,6 @@
 [package]
 name = "cirnet-format-project"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 publish = false
@@ -8,7 +8,8 @@ description = "Portable CIRNET LAB engineering project formats"
 
 [features]
 default = ["native"]
-native = ["dep:tempfile", "dep:zip"]
+package = ["dep:zip"]
+native = ["package", "dep:tempfile"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -1,11 +1,19 @@
 use crate::error::check_limit;
 use crate::{Error, Limits, Result};
-use serde::{Serialize, de::DeserializeOwned};
-use std::collections::HashSet;
+use serde::{
+    Serialize,
+    de::{DeserializeOwned, IgnoredAny},
+};
+use std::{borrow::Cow, collections::HashSet, ops::Range};
 
 /// Preflight before serde's Value parser, which otherwise accepts duplicate keys.
 /// Object keys are decoded for comparisons, including escaped spellings.
 pub(crate) fn read<T: DeserializeOwned>(bytes: &[u8], limits: &Limits) -> Result<T> {
+    preflight(bytes, limits)?;
+    Ok(serde_json::from_slice(bytes)?)
+}
+
+fn preflight(bytes: &[u8], limits: &Limits) -> Result<()> {
     check_limit("JSON bytes", bytes.len() as u64, limits.max_json_bytes)?;
     std::str::from_utf8(bytes).map_err(|error| Error::JsonPolicy {
         offset: error.valid_up_to(),
@@ -22,7 +30,7 @@ pub(crate) fn read<T: DeserializeOwned>(bytes: &[u8], limits: &Limits) -> Result
     if scanner.pos != bytes.len() {
         return Err(scanner.error("trailing input"));
     }
-    Ok(serde_json::from_slice(bytes)?)
+    Ok(())
 }
 
 pub(crate) fn write<T: Serialize>(value: &T, limits: &Limits) -> Result<Vec<u8>> {
@@ -30,7 +38,7 @@ pub(crate) fn write<T: Serialize>(value: &T, limits: &Limits) -> Result<Vec<u8>>
     object.sort_all_objects();
     let mut bytes = serde_json::to_vec_pretty(&object)?;
     bytes.push(b'\n');
-    read::<serde::de::IgnoredAny>(&bytes, limits)?;
+    preflight(&bytes, limits)?;
     Ok(bytes)
 }
 
@@ -41,7 +49,12 @@ struct Scanner<'a> {
     limits: &'a Limits,
 }
 
-impl Scanner<'_> {
+struct StringToken {
+    range: Range<usize>,
+    escaped: bool,
+}
+
+impl<'a> Scanner<'a> {
     fn error(&self, reason: &'static str) -> Error {
         Error::JsonPolicy {
             offset: self.pos,
@@ -71,16 +84,23 @@ impl Scanner<'_> {
             self.limits.max_json_nodes as u64,
         )
     }
-    fn string_range(&mut self) -> Result<std::ops::Range<usize>> {
+    fn string_token(&mut self) -> Result<StringToken> {
         let start = self.pos;
+        let mut escaped = false;
         if !self.take(b'"') {
             return Err(self.error("expected a JSON string"));
         }
         while let Some(byte) = self.peek() {
             self.pos += 1;
             match byte {
-                b'"' => return Ok(start..self.pos),
+                b'"' => {
+                    return Ok(StringToken {
+                        range: start..self.pos,
+                        escaped,
+                    });
+                }
                 b'\\' => {
+                    escaped = true;
                     if self.peek().is_none() {
                         break;
                     }
@@ -91,6 +111,17 @@ impl Scanner<'_> {
             }
         }
         Err(self.error("unterminated JSON string"))
+    }
+
+    fn decoded_key(&mut self) -> Result<Cow<'a, str>> {
+        let StringToken { range, escaped } = self.string_token()?;
+        if escaped {
+            return Ok(Cow::Owned(serde_json::from_slice(&self.bytes[range])?));
+        }
+        Ok(Cow::Borrowed(
+            std::str::from_utf8(&self.bytes[range.start + 1..range.end - 1])
+                .expect("input was validated as UTF-8"),
+        ))
     }
     fn value(&mut self, depth: usize) -> Result<()> {
         self.space();
@@ -104,8 +135,10 @@ impl Scanner<'_> {
             Some(b'{') => self.container(depth, true),
             Some(b'[') => self.container(depth, false),
             Some(b'"') => {
-                let range = self.string_range()?;
-                serde_json::from_slice::<String>(&self.bytes[range])?;
+                let StringToken { range, escaped } = self.string_token()?;
+                if escaped {
+                    serde_json::from_slice::<String>(&self.bytes[range])?;
+                }
                 Ok(())
             }
             Some(b't') => self.literal(b"true"),
@@ -132,7 +165,8 @@ impl Scanner<'_> {
             check_limit("number length", (self.pos - start) as u64, 128)?;
         }
         let value = &self.bytes[start..self.pos];
-        serde_json::from_slice::<serde_json::Number>(value)?;
+        // Check JSON number grammar without allocating an arbitrary-precision Number.
+        serde_json::from_slice::<IgnoredAny>(value)?;
         let text = std::str::from_utf8(value).expect("scanner accepts only ASCII number bytes");
         let machine = text
             .parse::<f64>()
@@ -159,32 +193,12 @@ impl Scanner<'_> {
         loop {
             if object {
                 self.tick()?;
-                let range = self.string_range()?;
-                let key: String = serde_json::from_slice(&self.bytes[range])?;
+                let key = self.decoded_key()?;
                 // serde_json reserves this key in arbitrary-precision mode.
                 if key == "$serde_json::private::Number" {
                     return Err(self.error("reserved JSON key"));
                 }
-                let semantic_key = key
-                    .chars()
-                    .filter(|ch| ch.is_ascii_alphanumeric())
-                    .map(|ch| ch.to_ascii_lowercase())
-                    .collect::<String>();
-                if matches!(
-                    semantic_key.as_str(),
-                    "accesstoken"
-                        | "refreshtoken"
-                        | "csrftoken"
-                        | "sessioncookie"
-                        | "sessiontoken"
-                        | "authorization"
-                        | "password"
-                        | "privatekey"
-                        | "executionlease"
-                        | "leasetoken"
-                        | "hardwarepermit"
-                        | "safetyapproval"
-                ) {
+                if forbidden_key(&key) {
                     return Err(self.error("session credential or execution authority field"));
                 }
                 if !keys.insert(key) {
@@ -206,4 +220,32 @@ impl Scanner<'_> {
             self.space();
         }
     }
+}
+
+fn forbidden_key(key: &str) -> bool {
+    // A longer normalized key cannot match any reserved name.
+    let mut normalized = [0; 16];
+    let mut length = 0;
+    for byte in key.bytes().filter(u8::is_ascii_alphanumeric) {
+        let Some(slot) = normalized.get_mut(length) else {
+            return false;
+        };
+        *slot = byte.to_ascii_lowercase();
+        length += 1;
+    }
+    matches!(
+        &normalized[..length],
+        b"accesstoken"
+            | b"refreshtoken"
+            | b"csrftoken"
+            | b"sessioncookie"
+            | b"sessiontoken"
+            | b"authorization"
+            | b"password"
+            | b"privatekey"
+            | b"executionlease"
+            | b"leasetoken"
+            | b"hardwarepermit"
+            | b"safetyapproval"
+    )
 }

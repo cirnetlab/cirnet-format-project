@@ -16,6 +16,7 @@ impl ProjectPath {
         Ok(Self(path))
     }
 
+    /// Returns the original portable spelling.
     pub fn as_str(&self) -> &str {
         &self.0
     }

@@ -51,10 +51,20 @@ pub fn hash_reader(reader: impl Read, max_bytes: u64) -> Result<(u64, Digest)> {
 }
 
 pub(crate) fn transfer(
+    reader: impl Read,
+    writer: impl Write,
+    limit: u64,
+    context: &str,
+) -> Result<(u64, Digest)> {
+    transfer_with(reader, writer, limit, context, |_| Ok(()))
+}
+
+pub(crate) fn transfer_with(
     mut reader: impl Read,
     mut writer: impl Write,
     limit: u64,
     context: &str,
+    mut progress: impl FnMut(u64) -> Result<()>,
 ) -> Result<(u64, Digest)> {
     let mut hasher = Sha256::new();
     let mut buffer = [0; 64 * 1024];
@@ -77,6 +87,7 @@ pub(crate) fn transfer(
             .write_all(&buffer[..read])
             .map_err(|error| io(context, error))?;
         hasher.update(&buffer[..read]);
+        progress(count)?;
     }
     Ok((count, Digest(format!("{:x}", hasher.finalize()))))
 }

@@ -1,28 +1,15 @@
 # CIRNET Project Format Core
 
-A standalone Rust library for working engineering projects and portable CIRNET LAB packages. The project format, document envelope and package profile are **1.0 candidates**. The Rust crate starts at **0.1.0**.
+Rust library for working CIRNET engineering projects and portable project
+packages. The Rust crate is a **0.2.0 development candidate**. The project
+manifest, document envelope and package profile are **1.0 candidates**.
 
-- [Format 1.0 specification and limits](spec/1.0/README.md)
-- [Integration guide](docs/integration.md) · [Tiếng Việt](docs/vi/tich-hop.md)
-- [Verification and benchmark results](docs/verification.md)
-- [Licensing scope](LICENSING.md)
+Thư viện Rust quản lý dự án kỹ thuật CIRNET đang làm việc và gói dự án có thể
+trao đổi. Crate Rust đang ở giai đoạn **ứng viên phát triển 0.2.0**. Manifest dự
+án, envelope tài liệu và profile gói đều ở giai đoạn **ứng viên 1.0**.
 
-```rust
-use cirnet_format_project::{Limits, Manifest, decode_manifest};
-
-let limits = Limits::default();
-let project = Manifest::new("project-01", "Bench supply", vec!["electronics".into()]);
-let bytes = project.to_bytes(&limits)?;
-assert_eq!(decode_manifest(&bytes, &limits)?.project_id, "project-01");
-# Ok::<(), cirnet_format_project::Error>(())
-```
-
-The default `native` feature adds filesystem storage and ZIP. Use `--no-default-features` for byte-oriented manifest, document, migration, and integrity APIs. Generate the full API reference with `cargo doc --locked --all-features --no-deps`.
-
-```sh
-cargo test --locked --all-features
-cargo run --locked --example working_project -- ./my-lab
-cargo bench --locked --bench workloads
-```
-
-Examples create data only under their explicitly supplied working directory. The core performs no background sync, authorization, or execution.
+- [English documentation](docs/en/index.md) · [Tài liệu tiếng Việt](docs/vi/index.md)
+- [Quick start](docs/en/guides/getting-started.md) · [Bắt đầu](docs/vi/guides/getting-started.md)
+- [Format 1.0 specification and schemas / Đặc tả và schema định dạng 1.0](spec/1.0/README.md)
+- [Changelog / Lịch sử thay đổi](CHANGELOG.md)
+- [Licensing scope / Phạm vi cấp phép](LICENSING.md)
