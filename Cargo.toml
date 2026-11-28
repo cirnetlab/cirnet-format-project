@@ -1,0 +1,27 @@
+[package]
+name = "cirnet-format-project"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+description = "Portable CIRNET LAB engineering project formats"
+
+[features]
+default = ["native"]
+native = ["dep:tempfile", "dep:zip"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+sha2 = "0.10"
+thiserror = "2"
+tempfile = { version = "3.27", optional = true }
+zip = { version = "9.8.2", default-features = false, features = ["deflate-flate2-zlib-rs"], optional = true }
+
+[dev-dependencies]
+tempfile = "3.27"
+
+[[bench]]
+name = "workloads"
+harness = false
+required-features = ["native"]

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cirnet:project-format:1.0:document",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "cirnet.document"
+    },
+    "format_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "$ref": "#/$defs/token"
+    },
+    "kind": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/token"
+        },
+        {
+          "not": {
+            "const": "circuit-graph"
+          }
+        }
+      ]
+    },
+    "schema_version": {
+      "$ref": "#/$defs/token"
+    },
+    "payload": {},
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "id",
+    "kind",
+    "schema_version",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "token": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*(\\.[A-Za-z0-9][A-Za-z0-9_-]*)+$"
+      },
+      "additionalProperties": true
+    }
+  }
+}

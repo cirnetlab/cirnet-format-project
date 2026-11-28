@@ -1,0 +1,9 @@
+{
+  "schema_version":"1.1",
+  "circuit_id":"legacy-mount",
+  "modules":[
+    {"id":"BB1","type":"BREADBOARD"},
+    {"id":"U1","type":"SN74HC08N","mount":{"kind":"breadboard","version":1,"boardId":"BB1","partId":"TI-SN74HC08N","partRevision":1,"packageId":"PDIP-14-300","packageRevision":1,"pose":{"position":{"x":-0.52,"y":0.309,"z":0},"rotation":0},"contacts":[{"kind":"pin-contact","version":1,"pinId":"1","contactId":"terminal:F:25"}]}}
+  ],
+  "connections":[]
+}

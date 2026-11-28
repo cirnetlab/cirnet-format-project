@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "circuit_id": "legacy-memory",
+  "modules": [
+    {"id":"M1","type":"MEMORY","properties":{"memory":{"version":"1.0","word_bits":8,"depth":2,"data":[34,51]}}},
+    {"id":"P1","type":"PROBE","position":{"x":0.123456789012345678901,"y":0,"z":4}}
+  ],
+  "connections":[{"source":"M1.D0","destination":"P1.IN","metadata":{"wireVisual":{"version":1,"mode":"FREE","color":"#0088cc"}}}],
+  "metadata":{"name":"Memory lab","counter":9007199254740993}
+}

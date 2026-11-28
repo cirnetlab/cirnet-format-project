@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cirnet:project-format:1.0:manifest",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "cirnet.project"
+    },
+    "format_version": {
+      "const": "1.0"
+    },
+    "project_id": {
+      "$ref": "#/$defs/token"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "description": {
+          "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "domains": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/document"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/asset"
+      }
+    },
+    "libraries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/library"
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/link"
+      }
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "project_id",
+    "name",
+    "domains"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "token": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[A-Za-z0-9_ .-]+(?:/[A-Za-z0-9_ .-]+)*$",
+      "description": "Additional portable segment, reserved device name, collision and project-root rules are applied by Core."
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*(\\.[A-Za-z0-9][A-Za-z0-9_-]*)+$"
+      },
+      "additionalProperties": true
+    },
+    "document": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/token"
+        },
+        "kind": {
+          "$ref": "#/$defs/token"
+        },
+        "schema_version": {
+          "$ref": "#/$defs/token"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "title": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "schema_version",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "asset": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/token"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "media_type": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}$"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "media_type"
+      ],
+      "additionalProperties": false
+    },
+    "library": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/token"
+        },
+        "coordinate": {
+          "$ref": "#/$defs/token"
+        },
+        "version": {
+          "$ref": "#/$defs/token"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "coordinate",
+        "version",
+        "required"
+      ],
+      "additionalProperties": false
+    },
+    "link": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/token"
+        },
+        "relationship": {
+          "enum": [
+            "reference",
+            "dependency",
+            "library",
+            "configuration",
+            "result"
+          ]
+        }
+      },
+      "required": [
+        "target",
+        "relationship"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

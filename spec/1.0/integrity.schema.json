@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:cirnet:project-format:1.0:integrity",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "cirnet.package"
+    },
+    "format_version": {
+      "const": "1.0"
+    },
+    "algorithm": {
+      "const": "sha256"
+    },
+    "entries": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/path"
+      },
+      "required": [
+        "project.cirproj"
+      ],
+      "not": {
+        "required": [
+          "integrity.json"
+        ]
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/item"
+      }
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "algorithm",
+    "entries"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[A-Za-z0-9_ .-]+(?:/[A-Za-z0-9_ .-]+)*$",
+      "description": "Additional portable segment, reserved device name, collision and project-root rules are applied by Core."
+    },
+    "item": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967294
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "bytes",
+        "sha256"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
