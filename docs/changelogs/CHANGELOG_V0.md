@@ -11,6 +11,9 @@
 - Decode current manifests directly after strict JSON preflight. Retain
   version diagnostics and the full resource graph validation.
 
+- Clarify Project Manager ownership and document the proposed CAD
+  representation boundary while preserving Project Format 1.0.
+
 ### Added
 
 - Add bounded validated read sets, structured transaction outcomes and an

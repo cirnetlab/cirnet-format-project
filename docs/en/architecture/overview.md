@@ -25,9 +25,15 @@ supplies filesystem operations and coordinates project writes. The public Rust
 API is documented from the crate source. The versioned
 [format specification](../../../spec/1.0/README.md) defines persisted semantics.
 
-Shared wire schemas and generated SDKs belong to Contracts. EngineeringProject
-lifecycle, ACLs and service revision IDs belong to Project. A local SHA-256
-revision is an optimistic content token. Interface can project working data
-into an editor. In Lab-First flows, Remote authorizes operations and manages
-leases, and Hardware owns station enforcement. See the authoritative
+[Project Manager](https://github.com/cirnetlab/cirnet-project-manager) owns
+EngineeringProject and document lifecycle, logical organization, lifecycle
+revisions and artifact references. It consumes Format Core through public Rust
+APIs. A Format SHA-256 revision is an optimistic byte-content token. Shared wire
+schemas and generated SDKs belong to Contracts. Interface owns editor
+presentation. Server persistence and authorization remain with Remote in the
+current Lab implementation. Hardware owns station enforcement. See the authoritative
 [CIRNETLAB ownership routing](https://github.com/cirnetlab/cirnet-rules/blob/master/en/references/architecture-routing.md).
+
+The [CAD container architecture proposal](cad-container-proposal-v0.1.md)
+separates .cir3d assembly placement from editable CAD model data and describes
+the planned representation boundary.

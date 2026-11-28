@@ -2,6 +2,7 @@
 
 | Bên dùng | Phạm vi tích hợp |
 | --- | --- |
+| Project Manager | Dùng crate này cho manifest và sổ đăng ký trao đổi, tập đọc đã xác thực, giao dịch, codec và gói. Project Manager sở hữu ngữ nghĩa vòng đời và cây logic. |
 | Interface và Studio | Dựng Project Explorer từ ID, loại, tiêu đề và liên kết trong sổ đăng ký. Chỉ tải tài liệu khi có yêu cầu. Hỏi bên sở hữu chuyên ngành về khả năng chỉnh sửa schema hỗ trợ. |
 | Remote | Cấp quyền lưu trữ và truyền dữ liệu trước khi xử lý định dạng. Cung cấp vùng tạm riêng có hạn mức để chuẩn bị bản nhập. Lease máy chủ, điều khiển Lab và phê duyệt thao tác vật lý vẫn thuộc các bên sở hữu tương ứng. |
 | CLI | Cung cấp riêng thao tác kiểm tra metadata, xác minh và công bố. Hiển thị kết quả kiểm tra metadata cùng trạng thái tài nguyên chưa xác minh. Yêu cầu chọn đích mới tường minh để công bố. |
@@ -29,11 +30,13 @@ chứng quy trình thư viện cục bộ. Tích hợp sản phẩm, lưu trữ 
 cấp quyền thực thi cần bằng chứng riêng.
 
 Contracts sở hữu các profile CircuitGraph dùng chung. Chuyển byte gốc cho
-trình xác thực của bên sở hữu và tuân theo quy tắc chỉnh sửa của họ. Project
-sở hữu revision vòng đời, cộng tác và quyền truy cập EngineeringProject.
-Revision SHA-256 của Core chỉ mô tả nội dung tệp cục bộ. Cấp quyền Lab-First
-thuộc Remote, còn bảo vệ tại trạm thuộc Hardware.
+trình xác thực của bên sở hữu và tuân theo quy tắc chỉnh sửa của họ.
+[Project Manager](https://github.com/cirnetlab/cirnet-project-manager) sở hữu
+revision vòng đời EngineeringProject và tham chiếu artifact.
+Revision SHA-256 của Core mô tả nội dung tệp cục bộ. Revision máy chủ và
+cấp quyền Lab-First thuộc bên sở hữu dịch vụ hiện hành là Remote.
+Hardware duy trì bảo vệ tại trạm.
 Xem [bảng phân quyền sở hữu](https://github.com/cirnetlab/cirnet-rules/blob/master/en/references/architecture-routing.md).
 
 <!-- source: docs/en/guides/integration.md -->
-<!-- source-sha256: 8be0bf3d33b84bc2b9b61abf7e08cd7852e6165fbd4baac92ade4b00d21311f0 -->
+<!-- source-sha256: b391e5adb0f4bd40c1dc4311b86b1122e1eaba672ac36219a625b7dd0eb71f76 -->

@@ -2,6 +2,7 @@
 
 | Consumer | Integration boundary |
 | --- | --- |
+| Project Manager | Use this crate for the portable manifest and registry, validated read sets, transactions, codecs and packages. Project Manager owns lifecycle and logical tree semantics. |
 | Interface and Studio | Populate Project Explorer with registry IDs, kinds, titles and links. Load a document only when requested. Ask its domain owner which editing capabilities the schema supports. |
 | Remote | Authorize storage and transfer before format processing. Supply private, quota-controlled scratch space for a prepared import. Server leases, Lab control and physical approvals stay at their owning boundaries. |
 | CLI | Expose inspect, verify and publish independently. Display inspection as metadata with unverified resources. Ask for an explicit, new destination for publication. |
@@ -29,8 +30,10 @@ library workflow. Product integration, browser persistence and execution
 authorization require separate evidence.
 
 Contracts owns the shared CircuitGraph profiles. Pass the original bytes
-to the owner validator and retain the owner-defined editor rules. Project
-owns EngineeringProject lifecycle revisions, collaboration and access.
-Core SHA-256 revisions only describe local file content. Lab-First
-authorization remains with Remote and station protection with Hardware.
+to the owner validator and retain the owner-defined editor rules.
+[Project Manager](https://github.com/cirnetlab/cirnet-project-manager) owns
+EngineeringProject lifecycle revisions and artifact references.
+Core SHA-256 revisions describe local file content. Server revisions and
+Lab-First authorization remain with the current service owner, Remote.
+Hardware retains station protection.
 See the [owner routing table](https://github.com/cirnetlab/cirnet-rules/blob/master/en/references/architecture-routing.md).

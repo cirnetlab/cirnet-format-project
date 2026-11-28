@@ -9,9 +9,11 @@ an approved Rules checkout or verified artifact.
 [Architecture policy](https://github.com/cirnetlab/cirnet-rules/blob/master/en/policies/architecture.md) ·
 [Ownership routing](https://github.com/cirnetlab/cirnet-rules/blob/master/en/references/architecture-routing.md)
 
-Retain domain semantics in their owner repositories. Contracts owns shared CircuitGraph schemas,
-Project owns its lifecycle revisions and authorization, and Remote and
-Hardware own their Lab control and station-protection boundaries.
+Retain domain semantics in their owner repositories. Contracts owns shared
+CircuitGraph schemas. Project Manager owns engineering project lifecycle
+and consumes Format Core as a downstream library. Keep Format Core independent
+of Project Manager and CAD engines. Remote and Hardware retain their server,
+Lab control and station-protection boundaries.
 
 - Confirm the repository, Git revision, status and authorized paths. Preserve
   existing user edits, fixtures, licensing and historical evidence.
