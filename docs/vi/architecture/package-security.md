@@ -54,5 +54,11 @@ chiều giữa các nền tảng trước khi bật từng khả năng. Vị tr�
 ngoài cần mô hình tin cậy và truy cập tường minh. Phiên bản 1.0 không tự động
 phân giải các vị trí này.
 
+`export_file_with_outcome` và `export_file_with_progress_and_outcome`
+phân biệt tệp xuất đã hiển thị kèm cảnh báo đồng bộ với thao tác bị từ
+chối trước khi đặt tệp. Tiếp tục phân loại bản nhập đã chuẩn bị theo kết
+quả công bố hoặc lỗi từ chối kèm đích còn giữ lại. Dựa vào trạng thái đã
+báo trước khi quyết định thử lại.
+
 <!-- source: docs/en/architecture/package-security.md -->
-<!-- source-sha256: 0ffcce69285a854b3bd06ac54228f570f2ca722f09eeaf1ebc32450f682cc6a3 -->
+<!-- source-sha256: 9710648635fc2c34697e4035fc89b4f6d6744b748ad7decda5ec3d3429a7d285 -->

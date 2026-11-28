@@ -9,7 +9,10 @@ use crate::{
     Digest, Error, Limits, Manifest, ProjectPath, Result,
     error::io,
     integrity::transfer_with,
-    storage::{Project, open_regular, persist_new, resolve, temp_bytes, trusted_root, write_lock},
+    storage::{
+        FilePublicationOutcome, Project, open_regular, persist_new, resolve, temp_bytes,
+        trusted_root, write_lock,
+    },
 };
 use std::{
     fs::{self, File, OpenOptions},
@@ -88,6 +91,16 @@ pub fn export_file(
     project: &Project,
     compression: Compression,
 ) -> Result<()> {
+    export_file_with_outcome(path, project, compression)?.into_result()
+}
+
+/// Export without replacing an existing file, separating a published package
+/// from any post-installation durability warning.
+pub fn export_file_with_outcome(
+    path: impl AsRef<Path>,
+    project: &Project,
+    compression: Compression,
+) -> Result<FilePublicationOutcome> {
     export_file_with(
         path.as_ref(),
         project,
@@ -102,8 +115,19 @@ pub fn export_file_with_progress(
     path: impl AsRef<Path>,
     project: &Project,
     compression: Compression,
-    mut progress: impl FnMut(PackageProgress<'_>) -> ControlFlow<()>,
+    progress: impl FnMut(PackageProgress<'_>) -> ControlFlow<()>,
 ) -> Result<()> {
+    export_file_with_progress_and_outcome(path, project, compression, progress)?.into_result()
+}
+
+/// Export cooperatively. Cancellation rejects before installation. A warning in
+/// the successful outcome means the package is already installed.
+pub fn export_file_with_progress_and_outcome(
+    path: impl AsRef<Path>,
+    project: &Project,
+    compression: Compression,
+    mut progress: impl FnMut(PackageProgress<'_>) -> ControlFlow<()>,
+) -> Result<FilePublicationOutcome> {
     export_file_with(
         path.as_ref(),
         project,
@@ -117,7 +141,7 @@ fn export_file_with(
     project: &Project,
     compression: Compression,
     operation: &mut Operation<'_>,
-) -> Result<()> {
+) -> Result<FilePublicationOutcome> {
     let (parent, name) = destination_parts(path)?;
     if name.extension() != Some("cirpkg") {
         return Err(Error::Path(name.to_string()));

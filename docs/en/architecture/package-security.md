@@ -52,3 +52,9 @@ versioned policy with an allowlist and checks for secrets and private paths.
 Test migration, existing path collisions and cross-platform round trips
 before enabling either. Private and external locators require an explicit
 trust and access model. They have no automatic resolution in 1.0.
+
+The `export_file_with_outcome` and `export_file_with_progress_and_outcome`
+entry points distinguish a visible export with a synchronization warning
+from rejection before installation. Continue to classify a prepared import
+through its published outcome or retained-destination rejection.
+Use the reported state before deciding whether to retry.

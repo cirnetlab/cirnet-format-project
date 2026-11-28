@@ -1,6 +1,7 @@
 mod atomic_write;
 mod filesystem;
 mod project;
+pub use atomic_write::FilePublicationOutcome;
 pub(crate) use atomic_write::{
     persist_new, publish_new_resource, replace_staged, replace_temp, temp_bytes,
 };
@@ -9,4 +10,4 @@ pub(crate) use filesystem::{
     verify_file, write_lock,
 };
 pub(crate) use project::ensure_manifest_path;
-pub use project::{Project, Snapshot, StagedFile};
+pub use project::{CreateProjectOutcome, Project, Snapshot, StagedFile};

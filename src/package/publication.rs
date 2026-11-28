@@ -4,6 +4,7 @@ use crate::{
     error::io,
     integrity::hash_reader,
     storage::{Project, no_link_metadata, sync_dir, trusted_root},
+    transaction::DurabilityStatus,
 };
 use std::{
     collections::BTreeMap,
@@ -24,6 +25,18 @@ pub struct PackagePublishOutcome {
     pub warning: Option<Error>,
 }
 
+impl PackagePublishOutcome {
+    /// Confirmation of the filesystem synchronization available for this import.
+    pub fn durability(&self) -> DurabilityStatus {
+        DurabilityStatus::after_publication(self.warning.as_ref())
+    }
+
+    /// Inspect the published destination when synchronization or marker cleanup failed.
+    pub fn inspection_required(&self) -> bool {
+        self.warning.is_some()
+    }
+}
+
 /// Precommit outcomes from verified package publication.
 #[derive(Debug, thiserror::Error)]
 pub enum PackagePublishError {
@@ -38,6 +51,13 @@ pub enum PackagePublishError {
         cause: Box<Error>,
         cleanup: Box<Error>,
     },
+}
+
+impl PackagePublishError {
+    /// Check the incomplete destination before retrying.
+    pub fn inspection_required(&self) -> bool {
+        matches!(self, Self::Incomplete { .. })
+    }
 }
 
 impl From<PackagePublishError> for Error {

@@ -86,3 +86,25 @@ File and directory synchronization have platform and filesystem limits. Treat
 power-loss durability and shared or network filesystems as separate
 qualification questions. Reopen the manifest and affected files after an
 ambiguous failure before issuing another write.
+
+## Project link revisions and capture budgets
+
+Changing a hard project link requires captured tokens for its affected
+local dependency or library closure, including existing target resources.
+Soft references, configuration and result links are metadata edits unless
+the caller declares a content dependency. An unchanged hard edge does
+not make unrelated project metadata writes hash the full project.
+Use a revision-bearing changeset when changing hard root relationships.
+
+Use `Project::read_revisions` to capture streaming byte digests without
+retaining documents or authorizing their domain content. It coordinates
+with cooperating writers while hashing the selected resources. For
+buffered document reads, `read_set_with_buffer_limit` caps retained
+document bytes independently of existing per-resource and aggregate limits.
+Both modes produce tokens that the transaction rechecks before publication.
+
+`Project::apply_report` and `save_document_report` expose a typed rejection
+with a recovery requirement. Inspect a pending or unknown recovery state
+before retrying. `Project::create_with_outcome` reports an installed project
+with the file publication status even if directory durability is uncertain.
+These are additive APIs. Legacy entry points keep their return types.

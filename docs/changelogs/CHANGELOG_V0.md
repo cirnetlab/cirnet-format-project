@@ -4,6 +4,16 @@
 
 ## Unreleased
 
+### Added
+
+- Add bounded validated read sets, structured transaction outcomes and an
+  explicit path for changing registered resource metadata.
+- Register exact owner migration edges and qualify a standalone Rust consumer.
+- Compare Draft 2020-12 schema vectors with runtime behavior and exercise
+  bounded parser, archive and recovery mutations.
+- Stream revision-only read sets and cap buffered document bytes independently.
+- Add typed create and export publication results and transaction rejection recovery requirements.
+
 ### Changed
 
 - Standardize shared English major-version changelog navigation and add
@@ -14,19 +24,12 @@
 - Clarify Project Manager ownership and document the proposed CAD
   representation boundary while preserving Project Format 1.0.
 
-### Added
-
-- Add bounded validated read sets, structured transaction outcomes and an
-  explicit path for changing registered resource metadata.
-- Register exact owner migration edges and qualify a standalone Rust consumer.
-- Compare Draft 2020-12 schema vectors with runtime behavior and exercise
-  bounded parser, archive and recovery mutations.
-
 ### Fixed
 
 - Clean up operation-owned package files after pre-publication cancellation
   when ownership is verifiable. Report retained destinations and allow
   retry from a verified stage after clean rejection.
+- Require affected dependency revisions when changing project-level hard relationships.
 
 ### Security
 

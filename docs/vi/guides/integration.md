@@ -38,5 +38,11 @@ cấp quyền Lab-First thuộc bên sở hữu dịch vụ hiện hành là Rem
 Hardware duy trì bảo vệ tại trạm.
 Xem [bảng phân quyền sở hữu](https://github.com/cirnetlab/cirnet-rules/blob/master/en/references/architecture-routing.md).
 
+Đối với ứng dụng có phiên, bao bọc token đọc Format trong phiên dự án đang
+mở và gắn bao này với handle đã tạo nó. Digest có thể giống nhau giữa các
+bản làm việc. Với phụ thuộc nội dung không cần payload tài liệu, dùng API
+chỉ lấy revision với hash chính xác. Kiểm tra kết quả công bố và từ chối
+có kiểu trước khi thử lại hoặc làm mới giao diện.
+
 <!-- source: docs/en/guides/integration.md -->
-<!-- source-sha256: b391e5adb0f4bd40c1dc4311b86b1122e1eaba672ac36219a625b7dd0eb71f76 -->
+<!-- source-sha256: 8b4ecde50311f80602c7f4b75b6f9668ead6b2033293c59f33164b55451ccda7 -->

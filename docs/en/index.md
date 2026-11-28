@@ -20,6 +20,8 @@ profiles and domain schemas have independent version numbers.
 - [Package security](architecture/package-security.md) describes archive and path boundaries.
 - [Format 1.0 specification and schemas](../../spec/1.0/README.md) define the persisted formats.
 
+- [CAD container proposal 0.1](architecture/cad-container-proposal-v0.1.md) defines the future representation boundary.
+
 ## Contribute and verify
 
 - [Development](contributing/development.md) covers repository workflow.
@@ -30,4 +32,5 @@ profiles and domain schemas have independent version numbers.
 
 - [Changelog by major version](../changelogs/README.md) records changes in English.
 - [0.1.0 verification and benchmark report](../history/v0.1.0-verification.md) preserves the original English Foundation evidence.
+- [0.2.0 hardening qualification](../history/v0.2.0-hardening-qualification.md) records the earlier Windows checks and comparisons.
 - [Licensing scope](../../LICENSING.md) describes the terms that apply.

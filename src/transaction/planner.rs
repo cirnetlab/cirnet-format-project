@@ -71,13 +71,13 @@ pub(crate) fn in_place<'a, R>(
 }
 
 pub(crate) fn manifest<'a, 'b, R>(
-    previous: &'a Manifest,
+    previous_manifest: &'a Manifest,
     next: &'b Manifest,
     expected: &Expectations,
     removals: &BTreeSet<String>,
     writes: &[ResourceWrite<R>],
 ) -> Result<ManifestPlan<'a, 'b>> {
-    let previous = resource_map(previous);
+    let previous = resource_map(previous_manifest);
     let proposed = resource_map(next);
     let mut operations = HashSet::with_capacity(writes.len());
     for write in writes {
@@ -99,6 +99,28 @@ pub(crate) fn manifest<'a, 'b, R>(
     }
     let mut old_affected = Vec::new();
     let mut new_affected = Vec::new();
+    if previous_manifest.links != next.links {
+        let previous_hard = previous_manifest
+            .links
+            .iter()
+            .filter(|link| link.relationship.is_hard())
+            .collect::<HashSet<_>>();
+        let next_hard = next
+            .links
+            .iter()
+            .filter(|link| link.relationship.is_hard())
+            .collect::<HashSet<_>>();
+        old_affected.extend(
+            previous_hard
+                .difference(&next_hard)
+                .map(|&link| link.target.as_str()),
+        );
+        new_affected.extend(
+            next_hard
+                .difference(&previous_hard)
+                .map(|&link| link.target.as_str()),
+        );
+    }
     let mut metadata = Vec::new();
     for (&id, &old) in &previous {
         match proposed.get(id).copied() {

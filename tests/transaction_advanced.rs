@@ -256,10 +256,12 @@ fn interrupted_publication_retains_external_files_and_leaves_previous_manifest()
         ));
     }
     changes.set_manifest(next);
-    assert!(matches!(
-        project.apply(changes, &codec),
-        Err(Error::Conflict(_))
-    ));
+    let rejection = project.apply_report(changes, &codec).unwrap_err();
+    assert!(matches!(rejection.cause, Error::Conflict(_)));
+    assert_eq!(
+        rejection.recovery,
+        cirnet_format_project::transaction::RecoveryRequirement::Inspect
+    );
     assert_eq!(
         project.inspect_recovery().unwrap(),
         RecoveryState::BeforePublication

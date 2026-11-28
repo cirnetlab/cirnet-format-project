@@ -1,7 +1,8 @@
 //! Local filesystem adapter. The manifest is the commit point for staged multi-file changes.
 
 use super::{
-    open_regular, persist_new, read_file, temp_bytes, trusted_root, verify_file, write_lock,
+    FilePublicationOutcome, open_regular, persist_new, read_file, temp_bytes, trusted_root,
+    verify_file, write_lock,
 };
 use crate::{
     CodecRegistry, Digest, Error, Limits, Manifest, ProjectPath, Resource, Result, decode_document,
@@ -9,7 +10,8 @@ use crate::{
     error::{check_limit, io},
     hash_reader,
     transaction::{
-        self, ChangeSet, ResourceWrite, TransactionOutcome, ValidatedReadSet, WriteMode,
+        self, ChangeSet, ResourceWrite, TransactionOutcome, TransactionRejection, ValidatedReadSet,
+        WriteMode,
     },
 };
 use std::{
@@ -34,6 +36,12 @@ pub struct Project {
 pub struct Snapshot {
     pub bytes: Vec<u8>,
     pub revision: Digest,
+}
+
+/// A manifest installed at its destination and the result of directory synchronization.
+pub struct CreateProjectOutcome {
+    pub project: Project,
+    pub publication: FilePublicationOutcome,
 }
 
 /// New bytes for a registered immutable path in a staged commit.
@@ -70,6 +78,18 @@ impl Project {
 
     /// Create a manifest without replacing an existing file.
     pub fn create(path: impl AsRef<Path>, manifest: Manifest, limits: Limits) -> Result<Self> {
+        let outcome = Self::create_with_outcome(path, manifest, limits)?;
+        outcome.publication.into_result()?;
+        Ok(outcome.project)
+    }
+
+    /// Create without replacing an existing manifest. On success the manifest is
+    /// installed, even if the publication outcome carries a durability warning.
+    pub fn create_with_outcome(
+        path: impl AsRef<Path>,
+        manifest: Manifest,
+        limits: Limits,
+    ) -> Result<CreateProjectOutcome> {
         let bytes = manifest.to_bytes(&limits)?;
         let (root, manifest_path) = manifest_location(path.as_ref())?;
         ensure_manifest_path(&manifest, &manifest_path)?;
@@ -78,8 +98,11 @@ impl Project {
         let project = Self::from_parts(root, manifest_path, manifest, Digest::of(&bytes), limits);
         project.validate_resources()?;
         let file = temp_bytes(&project.root, &bytes)?;
-        persist_new(file, &project.root.join(project.manifest_path.as_path()))?;
-        Ok(project)
+        let publication = persist_new(file, &project.root.join(project.manifest_path.as_path()))?;
+        Ok(CreateProjectOutcome {
+            project,
+            publication,
+        })
     }
 
     pub(crate) fn from_parts(
@@ -153,12 +176,46 @@ impl Project {
     /// Capture requested documents and local asset tokens within the project limits.
     /// Bytes are loaded before taking the writer lock for the final revision check.
     pub fn read_set(&self, ids: &[&str]) -> Result<ValidatedReadSet> {
+        self.read_set_with_buffer_limit(ids, self.limits.max_total_bytes)
+    }
+
+    /// Capture validated document snapshots within an additional aggregate byte budget.
+    /// Native assets count against the total read-set limit without using the buffer budget.
+    pub fn read_set_with_buffer_limit(
+        &self,
+        ids: &[&str],
+        max_buffered_bytes: u64,
+    ) -> Result<ValidatedReadSet> {
+        self.check_read_count(ids)?;
+        self.check_revision()?;
+        let set = self.capture_read_set(ids, Some(max_buffered_bytes))?;
+        self.validate_read_set(&set)?;
+        Ok(set)
+    }
+
+    /// Capture exact local byte revisions without buffering or decoding documents.
+    /// Hash once under the cooperating writer lock to keep the selected set coherent.
+    pub fn read_revisions(&self, ids: &[&str]) -> Result<ValidatedReadSet> {
+        self.check_read_count(ids)?;
+        let _lock = write_lock(&self.root)?;
+        self.ensure_no_pending()?;
+        self.check_revision()?;
+        self.capture_read_set(ids, None)
+    }
+
+    fn check_read_count(&self, ids: &[&str]) -> Result<()> {
         check_limit(
             "read set resources",
             ids.len() as u64,
             self.limits.max_resources as u64,
-        )?;
-        self.check_revision()?;
+        )
+    }
+
+    fn capture_read_set(
+        &self,
+        ids: &[&str],
+        mut buffered_remaining: Option<u64>,
+    ) -> Result<ValidatedReadSet> {
         let mut documents = BTreeMap::new();
         let mut expected = BTreeMap::new();
         let mut remaining = self.limits.max_total_bytes;
@@ -169,24 +226,26 @@ impl Project {
                 )));
             }
             let resource = self.resource(id).ok_or_else(|| Error::Missing(id.into()))?;
-            let (size, revision) = if let Resource::Document(entry) = resource {
-                let document = self.read_document_bounded(entry, remaining)?;
-                let token = (document.bytes.len() as u64, document.revision.clone());
+            let (size, revision) = if let (Resource::Document(entry), Some(buffer_left)) =
+                (resource, buffered_remaining.as_mut())
+            {
+                let document = self.read_document_bounded(entry, remaining.min(*buffer_left))?;
+                let size = document.bytes.len() as u64;
+                *buffer_left -= size;
+                let revision = document.revision.clone();
                 documents.insert(id.to_owned(), document);
-                token
+                (size, revision)
             } else {
                 self.resource_digest(resource, remaining)?
             };
             remaining -= size;
             expected.insert(id.to_owned(), revision);
         }
-        let set = ValidatedReadSet {
+        Ok(ValidatedReadSet {
             manifest: self.revision.clone(),
             expected,
             documents,
-        };
-        self.validate_read_set(&set)?;
-        Ok(set)
+        })
     }
 
     /// Recheck the manifest and the requested resource tokens under the writer lock.
@@ -264,6 +323,17 @@ impl Project {
         bytes: &[u8],
         validate_change: impl FnOnce(&crate::DocumentEntry, &[u8]) -> std::result::Result<(), String>,
     ) -> Result<TransactionOutcome> {
+        Ok(self.save_document_report(id, expected_revision, bytes, validate_change)?)
+    }
+
+    /// Replace one document with structured publication and rejection diagnostics.
+    pub fn save_document_report(
+        &self,
+        id: &str,
+        expected_revision: &Digest,
+        bytes: &[u8],
+        validate_change: impl FnOnce(&crate::DocumentEntry, &[u8]) -> std::result::Result<(), String>,
+    ) -> std::result::Result<TransactionOutcome, TransactionRejection> {
         let entry = self.document(id)?;
         let mut changes = ChangeSet::new(self.revision.clone());
         changes.expect(id, expected_revision.clone());
@@ -303,6 +373,16 @@ impl Project {
         changes: ChangeSet<R>,
         registry: &CodecRegistry,
     ) -> Result<TransactionOutcome> {
+        Ok(self.apply_report(changes, registry)?)
+    }
+
+    /// Apply a transaction. A rejection identifies whether the retained staging
+    /// needs inspection. An outcome always reports whether publication occurred.
+    pub fn apply_report<R: Read>(
+        &mut self,
+        changes: ChangeSet<R>,
+        registry: &CodecRegistry,
+    ) -> std::result::Result<TransactionOutcome, TransactionRejection> {
         let published = transaction::commit::execute(
             self,
             changes,

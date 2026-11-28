@@ -373,6 +373,15 @@ fn published_manifest_survives_marker_cleanup_failure() {
         })
         .unwrap();
     assert!(matches!(result.warning, Some(Error::PublishedCleanup(_))));
+    assert!(result.inspection_required());
+    assert_eq!(
+        result.durability(),
+        if cfg!(unix) {
+            cirnet_format_project::transaction::DurabilityStatus::Confirmed
+        } else {
+            cirnet_format_project::transaction::DurabilityStatus::PlatformLimited
+        }
+    );
     assert_eq!(result.project.manifest(), &manifest);
     assert!(target.join(MANIFEST_ENTRY).is_file());
     assert_eq!(

@@ -24,6 +24,14 @@ impl ValidatedReadSet {
         self.expected.get(id)
     }
 
+    /// Iterate captured content tokens in deterministic resource ID order.
+    pub fn resource_revisions(&self) -> impl ExactSizeIterator<Item = (&str, &Digest)> {
+        self.expected
+            .iter()
+            .map(|(id, revision)| (id.as_str(), revision))
+    }
+
+    /// A document snapshot is available only if the capture buffered that document.
     pub fn document(&self, id: &str) -> Option<&Snapshot> {
         self.documents.get(id)
     }

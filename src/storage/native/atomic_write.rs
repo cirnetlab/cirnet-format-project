@@ -1,5 +1,5 @@
 use super::sync_dir;
-use crate::{Error, Result, error::io, integrity::transfer};
+use crate::{Error, Result, error::io, integrity::transfer, transaction::DurabilityStatus};
 use std::{fs, io::Write, path::Path};
 use tempfile::NamedTempFile;
 
@@ -15,7 +15,7 @@ pub(crate) fn publish_new_resource(source: &Path, target: &Path, bytes: u64) -> 
             Err(error) => return Err(io(target.display().to_string(), error)),
         }
     }
-    persist_new(copy_staged(source, target, bytes)?, target)
+    persist_new(copy_staged(source, target, bytes)?, target)?.into_result()
 }
 
 /// Return post-install sync errors separately from failures before replacement.
@@ -83,11 +83,31 @@ pub(crate) fn temp_bytes(parent: &Path, bytes: &[u8]) -> Result<NamedTempFile> {
     Ok(file)
 }
 
-pub(crate) fn persist_new(file: NamedTempFile, destination: &Path) -> Result<()> {
-    persist_new_path(file.into_temp_path(), destination)
+/// Successful no-clobber publication. A warning does not undo installation.
+#[derive(Debug)]
+pub struct FilePublicationOutcome {
+    pub durability: DurabilityStatus,
+    pub warning: Option<Error>,
 }
 
-pub(crate) fn persist_new_path(file: tempfile::TempPath, destination: &Path) -> Result<()> {
+impl FilePublicationOutcome {
+    pub(crate) fn into_result(self) -> Result<()> {
+        self.warning.map_or(Ok(()), Err)
+    }
+}
+
+pub(crate) fn persist_new(
+    file: NamedTempFile,
+    destination: &Path,
+) -> Result<FilePublicationOutcome> {
+    persist_new_with(file.into_temp_path(), destination, sync_installed)
+}
+
+fn persist_new_with(
+    file: tempfile::TempPath,
+    destination: &Path,
+    synchronize: impl FnOnce(&Path) -> Result<()>,
+) -> Result<FilePublicationOutcome> {
     file.persist_noclobber(destination).map_err(|error| {
         if error.error.kind() == std::io::ErrorKind::AlreadyExists {
             Error::Conflict(destination.display().to_string())
@@ -95,7 +115,11 @@ pub(crate) fn persist_new_path(file: tempfile::TempPath, destination: &Path) -> 
             io(destination.display().to_string(), error.error)
         }
     })?;
-    sync_installed(destination)
+    let warning = synchronize(destination).err();
+    Ok(FilePublicationOutcome {
+        durability: DurabilityStatus::after_publication(warning.as_ref()),
+        warning,
+    })
 }
 
 fn sync_installed(destination: &Path) -> Result<()> {
@@ -106,4 +130,36 @@ fn sync_installed(destination: &Path) -> Result<()> {
         },
         other => other,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn installed_file_remains_published_on_directory_sync_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("published");
+        let temp = temp_bytes(dir.path(), b"contents").unwrap();
+        let report = persist_new_with(temp.into_temp_path(), &destination, |target| {
+            assert_eq!(fs::read(target).unwrap(), b"contents");
+            Err(Error::Durability {
+                context: target.display().to_string(),
+                source: std::io::Error::other("injected sync failure"),
+            })
+        })
+        .unwrap();
+        assert_eq!(report.durability, DurabilityStatus::Uncertain);
+        assert!(matches!(report.warning, Some(Error::Durability { .. })));
+        assert_eq!(fs::read(&destination).unwrap(), b"contents");
+
+        let second = temp_bytes(dir.path(), b"overwrite").unwrap();
+        assert!(matches!(
+            persist_new_with(second.into_temp_path(), &destination, |_| panic!(
+                "no sync before installation"
+            )),
+            Err(Error::Conflict(_))
+        ));
+        assert_eq!(fs::read(destination).unwrap(), b"contents");
+    }
 }

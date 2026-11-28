@@ -1,5 +1,6 @@
 use super::{
-    ChangeSet, ResourceChange, ResourceChangeKind, TransactionOutcome, WriteMode, planner,
+    ChangeSet, ResourceChange, ResourceChangeKind, TransactionOutcome, TransactionRejection,
+    WriteMode, planner,
     recovery::{self, ANCHOR_STAGE, Journal, JournalFile},
     revision::{verify_expected, verify_expected_excluding, verify_revision},
 };
@@ -27,16 +28,26 @@ type Validate<'a> =
 
 pub(crate) fn execute<R: Read>(
     project: &Project,
-    mut changes: ChangeSet<R>,
+    changes: ChangeSet<R>,
     registry: &crate::CodecRegistry,
     mut validate: impl FnMut(WriteMode, &DocumentEntry, &[u8], &crate::DocumentRead<'_>) -> Result<()>,
-) -> Result<Publication> {
+) -> std::result::Result<Publication, TransactionRejection> {
     planner::check_limits(&changes, project.limits())?;
     if &changes.revision != project.revision() {
-        return Err(Error::Conflict("manifest revision".into()));
+        return Err(Error::Conflict("manifest revision".into()).into());
     }
 
     let _lock = write_lock(project.root())?;
+    execute_locked(project, changes, registry, &mut validate)
+        .map_err(|cause| TransactionRejection::locked(cause, project.ensure_no_pending()))
+}
+
+fn execute_locked<R: Read>(
+    project: &Project,
+    mut changes: ChangeSet<R>,
+    registry: &crate::CodecRegistry,
+    validate: &mut Validate<'_>,
+) -> Result<Publication> {
     project.ensure_no_pending()?;
     project.check_revision()?;
     if let Some(next) = changes.manifest.take() {
@@ -45,18 +56,10 @@ pub(crate) fn execute<R: Read>(
         planner::check_identity(project.manifest(), &next)?;
         let digest = Digest::of(&bytes);
         if &digest != project.revision() {
-            return manifest_change(
-                project,
-                changes,
-                next,
-                bytes,
-                digest,
-                registry,
-                &mut validate,
-            );
+            return manifest_change(project, changes, next, bytes, digest, registry, validate);
         }
     }
-    in_place(project, changes, registry, &mut validate)
+    in_place(project, changes, registry, validate)
 }
 
 fn in_place<R: Read>(

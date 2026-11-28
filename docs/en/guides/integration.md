@@ -37,3 +37,9 @@ Core SHA-256 revisions describe local file content. Server revisions and
 Lab-First authorization remain with the current service owner, Remote.
 Hardware retains station protection.
 See the [owner routing table](https://github.com/cirnetlab/cirnet-rules/blob/master/en/references/architecture-routing.md).
+
+For a session-bound consumer, wrap the Format read tokens in the open
+project session and bind the wrapper to its originating handle. The digest
+can match across working copies. For a content dependency without document
+payloads, use the revision-only API with exact hashes. Check typed
+publication and rejection outcomes before retrying or refreshing a view.

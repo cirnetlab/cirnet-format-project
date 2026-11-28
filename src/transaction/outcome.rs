@@ -17,6 +17,63 @@ pub enum DurabilityStatus {
     Uncertain,
 }
 
+impl DurabilityStatus {
+    pub(crate) fn after_publication(warning: Option<&Error>) -> Self {
+        if matches!(warning, Some(Error::Durability { .. })) {
+            Self::Uncertain
+        } else if cfg!(unix) {
+            Self::Confirmed
+        } else {
+            Self::PlatformLimited
+        }
+    }
+}
+
+/// The recovery check performed after a rejected transaction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RecoveryRequirement {
+    Clean,
+    Inspect,
+    /// The write lock could not be taken, or the retained state could not be classified.
+    Unknown,
+}
+
+/// The transaction did not publish its commit point. Private staging or files
+/// installed before that point may still need inspection and recovery.
+#[derive(Debug, thiserror::Error)]
+#[error("{cause}")]
+pub struct TransactionRejection {
+    #[source]
+    pub cause: Error,
+    pub recovery: RecoveryRequirement,
+}
+
+impl TransactionRejection {
+    pub(crate) fn locked(cause: Error, recovery: crate::Result<()>) -> Self {
+        let recovery = match recovery {
+            Ok(()) => RecoveryRequirement::Clean,
+            Err(Error::RecoveryRequired) => RecoveryRequirement::Inspect,
+            Err(_) => RecoveryRequirement::Unknown,
+        };
+        Self { cause, recovery }
+    }
+}
+
+impl From<Error> for TransactionRejection {
+    fn from(cause: Error) -> Self {
+        Self {
+            cause,
+            recovery: RecoveryRequirement::Unknown,
+        }
+    }
+}
+
+impl From<TransactionRejection> for Error {
+    fn from(rejection: TransactionRejection) -> Self {
+        rejection.cause
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResourceChangeKind {
     Created,
@@ -69,12 +126,8 @@ impl TransactionOutcome {
             resources,
             durability: if !published {
                 DurabilityStatus::NotApplicable
-            } else if matches!(completion_error, Some(Error::Durability { .. })) {
-                DurabilityStatus::Uncertain
-            } else if cfg!(unix) {
-                DurabilityStatus::Confirmed
             } else {
-                DurabilityStatus::PlatformLimited
+                DurabilityStatus::after_publication(completion_error.as_ref())
             },
             recovery_required,
             completion_error,

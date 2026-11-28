@@ -86,5 +86,27 @@ chứng riêng độ bền khi mất điện và hệ thống tệp dùng chung 
 Mở lại manifest và các tệp bị tác động sau lỗi có kết quả chưa rõ trước khi
 ghi tiếp.
 
+## Revision liên kết dự án và giới hạn tập đọc
+
+Thay đổi liên kết cứng của dự án cần token đã lấy cho tập phụ thuộc hoặc
+thư viện cục bộ bị ảnh hưởng, gồm tài nguyên đích hiện có. Liên kết tham
+chiếu mềm, cấu hình và kết quả là thay đổi metadata trừ khi bên gọi khai
+báo phụ thuộc nội dung. Cạnh cứng giữ nguyên không buộc thao tác ghi metadata
+khác phải băm cả dự án. Dùng changeset có revision khi đổi quan hệ cứng
+cấp dự án.
+
+Dùng `Project::read_revisions` để tính digest byte theo luồng mà không giữ
+tài liệu hoặc cấp quyền nội dung chuyên ngành. Phương thức điều phối các
+tiến trình ghi tuân theo khóa khi băm tài nguyên đã chọn. Khi giữ nội dung
+tài liệu, `read_set_with_buffer_limit` giới hạn tổng byte tài liệu giữ trong
+bộ nhớ độc lập với giới hạn từng tài nguyên và giới hạn tổng hiện có.
+Cả hai chế độ tạo token để giao dịch kiểm tra lại trước khi công bố.
+
+`Project::apply_report` và `save_document_report` cung cấp lỗi từ chối
+có kiểu cùng yêu cầu phục hồi. Kiểm tra trạng thái phục hồi đang chờ hoặc
+chưa rõ trước khi thử lại. `Project::create_with_outcome` báo dự án đã đặt
+cùng trạng thái công bố tệp ngay cả khi chưa chắc độ bền của thư mục.
+Đây là API bổ sung. Các điểm vào cũ giữ kiểu kết quả.
+
 <!-- source: docs/en/architecture/transactions.md -->
-<!-- source-sha256: 8622d71d133a3166801ea4917e5ae364316fe6320c2104715e0ea8246e038a26 -->
+<!-- source-sha256: 0052005f5561923997ea19d0a0a7c24b8b3f22ee4707935fb89ee8005d3a5189 -->

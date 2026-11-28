@@ -20,6 +20,8 @@ chuyên ngành có số phiên bản độc lập.
 - [Bảo mật gói](architecture/package-security.md) mô tả giới hạn của kho lưu trữ và đường dẫn.
 - [Đặc tả và schema định dạng 1.0](../../spec/1.0/README.md) xác định các định dạng lưu trữ.
 
+- [Đề xuất container CAD 0.1](architecture/cad-container-proposal-v0.1.md) xác định ranh giới biểu diễn tương lai.
+
 ## Đóng góp và kiểm chứng
 
 - [Phát triển](contributing/development.md) hướng dẫn quy trình làm việc với kho mã.
@@ -30,7 +32,8 @@ chuyên ngành có số phiên bản độc lập.
 
 - [Lịch sử thay đổi theo phiên bản major](../changelogs/README.md) ghi lại các thay đổi bằng tiếng Anh.
 - [Báo cáo kiểm chứng và benchmark 0.1.0](../history/v0.1.0-verification.md) lưu bằng chứng Foundation gốc bằng tiếng Anh.
+- [Kiểm chứng hardening 0.2.0](../history/v0.2.0-hardening-qualification.md) ghi các kiểm tra và so sánh Windows trước đây.
 - [Phạm vi cấp phép](../../LICENSING.md) mô tả các điều khoản áp dụng.
 
 <!-- source: docs/en/index.md -->
-<!-- source-sha256: b34b1d826639a4f240929db75e53fb3e01b71f09e5c943b5a79cb74578f077ac -->
+<!-- source-sha256: f9fe68b236beb660946504d17dd44e884bc3306d4651bc4017baf086f1d80672 -->

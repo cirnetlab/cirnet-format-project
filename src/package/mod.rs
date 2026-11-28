@@ -11,8 +11,8 @@ mod publication;
 
 #[cfg(feature = "native")]
 pub use native::{
-    VerifiedPackage, export, export_file, export_file_with_progress, export_with_progress, verify,
-    verify_with_progress,
+    VerifiedPackage, export, export_file, export_file_with_outcome, export_file_with_progress,
+    export_file_with_progress_and_outcome, export_with_progress, verify, verify_with_progress,
 };
 
 #[cfg(feature = "native")]
