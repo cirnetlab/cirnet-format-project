@@ -38,8 +38,18 @@ cargo doc --locked --all-features --no-deps
   phases, path conflicts, opaque bytes, malformed JSON and archive bounds.
   Record property or fuzz tool, corpus, target, duration and findings
   when running parser or archive fuzzing.
-- Check matching English and Vietnamese paths, reviewed source hashes,
-  local links, the changelog and `git diff --check`.
+
+## Documentation checks
+
+From this repository root, use `check-docs --product --root .` from an approved
+CIRNET Rules checkout. Pass `--new-file <path>` for each added Markdown page.
+Run `git diff --check` and confirm the diff matches the documentation scope.
+
+Review relative links and heading anchors, matching English and Vietnamese
+paths, translation meaning and source hashes, and changelog provenance.
+See [writing documentation](writing-documentation.md) for conventions.
+Run a targeted build check when an edited path is used by compilation,
+packaging, tests or CI.
 
 ## Reproduce performance evidence
 

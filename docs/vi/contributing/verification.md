@@ -38,8 +38,18 @@ cargo doc --locked --all-features --no-deps
   phục hồi, xung đột đường dẫn, byte tài liệu chưa được hỗ trợ, JSON lỗi và
   giới hạn kho lưu trữ. Khi fuzz parser hoặc kho lưu trữ, ghi lại công cụ
   kiểm thử thuộc tính hoặc fuzz, corpus, đích, thời lượng và kết quả.
-- Kiểm tra cặp đường dẫn Anh–Việt, digest nguồn đã rà soát, liên kết nội bộ,
-  changelog và `git diff --check`.
+
+## Kiểm tra tài liệu
+
+Từ thư mục gốc kho mã này, dùng `check-docs --product --root .` từ checkout
+CIRNET Rules được phê duyệt. Truyền `--new-file <path>` cho mỗi trang Markdown
+được thêm. Chạy `git diff --check` và xác nhận diff đúng phạm vi tài liệu.
+
+Rà soát liên kết tương đối và anchor tiêu đề, các cặp đường dẫn Anh–Việt,
+ý nghĩa và hash nguồn của bản dịch, cùng thông tin nguồn gốc trong changelog.
+Xem quy ước trong [hướng dẫn viết tài liệu](writing-documentation.md).
+Chạy kiểm tra build có mục tiêu khi đường dẫn đã chỉnh sửa được dùng để
+biên dịch, đóng gói, kiểm thử hoặc chạy CI.
 
 ## Tái lập bằng chứng hiệu năng
 
@@ -59,4 +69,4 @@ artifact. [Lần chạy CI của baseline](https://github.com/cirnetlab/cirnet-f
 Dùng lần chạy và phép đo mới để kiểm chứng crate 0.2.0.
 
 <!-- source: docs/en/contributing/verification.md -->
-<!-- source-sha256: 009b645954005053ba2cdde79f5c6e7ffafa338eb4559524fb758dad7ec46c4b -->
+<!-- source-sha256: 78600be48bd0765c5b707b3c0cea3f43d50aac1ccdc38939abd7bc690d2305dc -->

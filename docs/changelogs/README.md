@@ -1,3 +1,3 @@
-# Changelogs
+# CIRNET Project Format changelog index
 
-- [0.x development and candidate history](v0.md)
+- [Version 0](CHANGELOG_V0.md)

@@ -1,4 +1,3 @@
-# Changelog
+# CIRNET Project Format changelog
 
-See the [major-version changelog index](docs/changelogs/README.md) and
-[0.x history](docs/changelogs/v0.md).
+[Changelog by major version](docs/changelogs/README.md)

@@ -1,18 +1,33 @@
 # CIRNET Project Format Core
 
+[Tiếng Việt](../vi/index.md) · [Repository README](../../README.md)
+
 Use the Rust library to inspect a working engineering project, save its
-resources, or exchange a portable package. The Rust crate, persisted format
+resources or exchange a portable package. The Rust crate, persisted format
 profiles and domain schemas have independent version numbers.
 
-- [Get started](guides/getting-started.md) with the native and portable API.
-- [Integrate](guides/integration.md) with an application or tool.
-- [Migrate](guides/migration.md) a 0.1.0 consumer or import legacy CircuitGraph.
-- [Architecture](architecture/overview.md) explains module and domain ownership.
+## Use and integrate
+
+- [Getting started](guides/getting-started.md) covers the native and portable APIs.
+- [Integration](guides/integration.md) covers applications and tools.
+- [Migration](guides/migration.md) covers 0.1.0 consumers and legacy CircuitGraph imports.
+
+## Architecture and format
+
+- [Architecture overview](architecture/overview.md) explains module and domain ownership.
 - [Project model](architecture/project-model.md) describes files, identities and references.
 - [Transactions and recovery](architecture/transactions.md) describes native writes.
 - [Package security](architecture/package-security.md) describes archive and path boundaries.
-- [Development](contributing/development.md) and [verification](contributing/verification.md)
-  explain repository checks and how to interpret evidence.
+- [Format 1.0 specification and schemas](../../spec/1.0/README.md) define the persisted formats.
 
-[Format 1.0 specification](../../spec/1.0/README.md) ·
-[Changelog](../changelogs/README.md) · [Tiếng Việt](../vi/index.md)
+## Contribute and verify
+
+- [Development](contributing/development.md) covers repository workflow.
+- [Verification](contributing/verification.md) covers repository checks and evidence.
+- [Writing documentation](contributing/writing-documentation.md) covers placement, translation and review.
+
+## History and licensing
+
+- [Changelog by major version](../changelogs/README.md) records changes in English.
+- [0.1.0 verification and benchmark report](../history/v0.1.0-verification.md) preserves the original English Foundation evidence.
+- [Licensing scope](../../LICENSING.md) describes the terms that apply.
